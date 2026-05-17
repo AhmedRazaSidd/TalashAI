@@ -12,6 +12,7 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import colors from '../theme/colors';
 import axiosClient from '../api/axiosClient';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const ChatDetailsScreen = () => {
   const route = useRoute();
@@ -50,7 +51,7 @@ const ChatDetailsScreen = () => {
       onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
     >
       <View style={styles.mediaIcon}>
-        <Text style={styles.mediaIconText}>📄</Text>
+        <Ionicons name="document-text" size={22} color={colors.accent} />
       </View>
       <View style={styles.mediaInfo}>
         <Text style={styles.mediaName} numberOfLines={1}>
@@ -74,7 +75,7 @@ const ChatDetailsScreen = () => {
         onPress={() => url && Linking.openURL(url)}
       >
         <View style={styles.linkIcon}>
-          <Text style={styles.linkIconText}>🔗</Text>
+          <Ionicons name="link" size={20} color={colors.accent} />
         </View>
         <View style={styles.linkInfo}>
           <Text style={styles.linkUrl} numberOfLines={2}>
@@ -89,7 +90,7 @@ const ChatDetailsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="arrow-back" size={24} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Session Details</Text>
         <View style={{ width: 24 }} />

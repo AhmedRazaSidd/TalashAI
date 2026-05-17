@@ -9,6 +9,8 @@ import SCREENS from '../constants/screenNames';
 import { fetchSessions } from '../store/slices/chatSlice';
 import { syncPushToken } from '../api/notifications';
 import axiosClient from '../api/axiosClient';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const HomeScreen = () => {
   const { t, i18n } = useTranslation();
@@ -59,7 +61,9 @@ const HomeScreen = () => {
           <View style={styles.headerLeft}>
             <Text style={styles.logoText}>{t('appName')}</Text>
             <Text style={[styles.greeting, i18n.language === 'ur' && styles.urduText]}>
-              {t('goodMorning')} {userName} {user?.subscriptionStatus === 'active' && '👑'}
+              {t('goodMorning')} {userName} {user?.subscriptionStatus === 'active' && (
+                <Ionicons name="sparkles" size={16} color={colors.accent} />
+              )}
             </Text>
           </View>
           <View style={styles.avatarContainer}>
@@ -81,7 +85,7 @@ const HomeScreen = () => {
             </Text>
           </View>
           <View style={styles.heroActionIcon}>
-             <Text style={{ fontSize: 24 }}>⚖️</Text>
+            <FontAwesome name="gavel" size={24} color={colors.accent} />
           </View>
         </TouchableOpacity>
 

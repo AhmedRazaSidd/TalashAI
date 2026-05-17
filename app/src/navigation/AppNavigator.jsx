@@ -1,7 +1,6 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
 import SCREENS from '../constants/screenNames';
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -19,6 +18,7 @@ import SecuritySettingsScreen from '../screens/SecuritySettingsScreen';
 import SupportScreen from '../screens/SupportScreen';
 import SubscriptionPlansScreen from '../screens/SubscriptionPlansScreen';
 import colors from '../theme/colors';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -43,7 +43,9 @@ const MainTabs = () => {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🏠</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "home" : "home-outline"} size={size || 22} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -51,7 +53,9 @@ const MainTabs = () => {
         component={LawyerListScreen}
         options={{
           tabBarLabel: 'Explore',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🔍</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "search" : "search-outline"} size={size || 22} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -59,7 +63,9 @@ const MainTabs = () => {
         component={ArchiveScreen}
         options={{
           tabBarLabel: 'History',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>📜</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "document-text" : "document-text-outline"} size={size || 22} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -67,7 +73,9 @@ const MainTabs = () => {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Profile',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>👤</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={size || 22} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>

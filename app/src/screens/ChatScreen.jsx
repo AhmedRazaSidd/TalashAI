@@ -25,6 +25,7 @@ import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
 import colors from '../theme/colors';
 import i18n from '../i18n/index';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import socketClient from '../api/socketClient';
 import axiosClient from '../api/axiosClient';
 import AudioPlayer from '../components/AudioPlayer';
@@ -386,7 +387,29 @@ const ChatScreen = () => {
             isUser ? styles.userBubble : (isLawyer ? styles.lawyerBubble : styles.aiBubble),
             item.tempId && styles.pendingBubble,
           ]}>
+<<<<<<< HEAD
             {renderBubbleContent()}
+=======
+            {(item.type === 'voice' || item.type === 'audio' || item.audioUrl) ? (
+              <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />
+            ) : item.type === 'attachment' || item.fileUrl ? (
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center' }}
+                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => {})}
+              >
+                <Ionicons name="document-text" size={20} color={isUser ? "#000000" : colors.accent} style={{ marginRight: 8 }} />
+                <Text style={[
+                  styles.bubbleText,
+                  isUser ? styles.userText : styles.aiText,
+                  { textDecorationLine: 'underline' }
+                ]}>
+                  {item.content || 'Document'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              renderTextContent(item.content || item.text)
+            )}
+>>>>>>> beb734b6a90829f6f5930de949ffc01011485024
 
             {/* Bottom row: bookmark star + timestamp */}
             <View style={styles.messageMeta}>
@@ -421,11 +444,11 @@ const ChatScreen = () => {
         <View style={styles.headerLeft}>
           {navigation.canGoBack() ? (
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Text style={styles.backIcon}>←</Text>
+              <Ionicons name="arrow-back" size={24} color={colors.accent} />
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity onPress={openDrawer} style={styles.drawerButton}>
-            <Text style={styles.hamburger}>☰</Text>
+            <Ionicons name="menu" size={24} color={colors.accent} />
           </TouchableOpacity>
         </View>
 
@@ -436,9 +459,24 @@ const ChatScreen = () => {
             disabled={!session?.lawyerId || user?.role === 'lawyer'} 
             onPress={() => navigation.navigate(SCREENS.LAWYER_PROFILE, { lawyerId: session.lawyerId })}
           >
-            <Text style={styles.headerSubtitle}>
-              {session?.status === 'with_lawyer' ? '👨‍⚖️ Lawyer Active' : (session?.status === 'resolved' ? '✅ Resolved' : '🤖 Talash AI')}
-            </Text>
+            <View style={styles.headerSubtitleRow}>
+              {session?.status === 'with_lawyer' ? (
+                <>
+                  <Ionicons name="shield-checkmark" size={12} color={colors.accent} style={{ marginRight: 4 }} />
+                  <Text style={styles.headerSubtitleText}>Lawyer Active</Text>
+                </>
+              ) : session?.status === 'resolved' ? (
+                <>
+                  <Ionicons name="checkmark-circle" size={12} color="#4CD964" style={{ marginRight: 4 }} />
+                  <Text style={[styles.headerSubtitleText, { color: '#4CD964' }]}>Resolved</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={12} color={colors.accent} style={{ marginRight: 4 }} />
+                  <Text style={styles.headerSubtitleText}>Talash AI</Text>
+                </>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
         
@@ -454,7 +492,7 @@ const ChatScreen = () => {
                 Alert.alert('Error', 'Failed to resolve case');
               }
             }}>
-              <Text style={styles.iconText}>✓</Text>
+              <Ionicons name="checkmark-circle-outline" size={20} color={colors.accent} />
             </TouchableOpacity>
           )}
           {user?.role === 'lawyer' && (
@@ -467,11 +505,11 @@ const ChatScreen = () => {
                 Alert.alert('Error', 'Could not generate summary.');
               }
             }}>
-              <Text style={styles.iconText}>Σ</Text>
+              <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.iconButton} onPress={() => sessionId && navigation.navigate(SCREENS.CHAT_DETAILS, { sessionId })}>
-            <Text style={styles.iconText}>ⓘ</Text>
+            <Ionicons name="information-circle-outline" size={20} color={colors.accent} />
           </TouchableOpacity>
         </View>
       </View>
@@ -480,7 +518,10 @@ const ChatScreen = () => {
       {showSummary && (
         <View style={styles.summaryOverlay}>
           <View style={styles.summaryModal}>
-            <Text style={styles.summaryTitle}>AI Case Brief 🤖</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <Ionicons name="sparkles" size={20} color={colors.accent} style={{ marginRight: 8 }} />
+              <Text style={[styles.summaryTitle, { marginBottom: 0 }]}>AI Case Brief</Text>
+            </View>
             <ScrollView style={{ maxHeight: 300 }}>
               <Text style={styles.summaryText}>{aiSummary}</Text>
             </ScrollView>
@@ -524,7 +565,7 @@ const ChatScreen = () => {
       {/* BOTTOM INPUT BAR */}
       <View style={styles.bottomInputBar}>
         <TouchableOpacity style={styles.paperclipButton} onPress={handleAttachment}>
-          <Text style={styles.paperclipIcon}>📎</Text>
+          <Ionicons name="attach" size={22} color={colors.textSecondary} />
         </TouchableOpacity>
 
         <TextInput
@@ -549,7 +590,7 @@ const ChatScreen = () => {
             onPress={handleSend}
             disabled={isTyping}
           >
-            <Text style={styles.actionIcon}>➤</Text>
+            <Ionicons name="send" size={18} color={colors.accent} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
@@ -558,7 +599,7 @@ const ChatScreen = () => {
             onPressOut={stopRecording}
             disabled={isTyping}
           >
-            <Text style={styles.actionIcon}>{isRecording ? '⏹' : '🎙️'}</Text>
+            <Ionicons name={isRecording ? "stop" : "mic"} size={20} color={isRecording ? "#FFFFFF" : colors.accent} />
           </TouchableOpacity>
         )}
       </View>
@@ -575,7 +616,7 @@ const ChatScreen = () => {
         <View style={styles.drawerTop}>
           <Text style={styles.drawerTitle}>{t('chatHistory')}</Text>
           <TouchableOpacity onPress={closeDrawer}>
-            <Text style={styles.closeDrawer}>✕</Text>
+            <Ionicons name="close" size={24} color="#888888" />
           </TouchableOpacity>
         </View>
 
@@ -618,7 +659,17 @@ const styles = StyleSheet.create({
   hamburger: { fontSize: 22, color: colors.accent },
   headerTitleContainer: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
   headerTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-  headerSubtitle: { color: colors.accent, fontSize: 10, marginTop: 2, fontWeight: '600' },
+  headerSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  headerSubtitleText: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '600',
+  },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 64, justifyContent: 'flex-end' },
   iconButton: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: colors.glass,
@@ -679,8 +730,8 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: 22, 
     alignItems: 'center', justifyContent: 'center', marginBottom: 2,
   },
-  sendButton: { backgroundColor: colors.accent },
-  micButton: { backgroundColor: '#00a884' }, // WhatsApp-style green for voice
+  sendButton: { backgroundColor: 'rgba(201, 168, 76, 0.15)', borderWidth: 1, borderColor: colors.accent },
+  micButton: { backgroundColor: 'rgba(201, 168, 76, 0.15)', borderWidth: 1, borderColor: colors.accent },
   actionIcon: { fontSize: 20, color: '#FFFFFF', fontWeight: 'bold' },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#00000080', zIndex: 998 },
   backdropTouchable: { flex: 1 },

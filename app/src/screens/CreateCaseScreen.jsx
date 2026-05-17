@@ -18,6 +18,7 @@ import SCREENS from '../constants/screenNames';
 import CustomButton from '../components/CustomButton';
 import { createSession } from '../store/slices/chatSlice';
 import axiosClient from '../api/axiosClient';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const CreateCaseScreen = () => {
   const { t } = useTranslation();
@@ -106,7 +107,7 @@ const CreateCaseScreen = () => {
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backIcon}>←</Text>
+            <Ionicons name="arrow-back" size={24} color={colors.accent} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('newCase') || 'New Case'}</Text>
           <View style={styles.rightPlaceholder} />
@@ -141,7 +142,7 @@ const CreateCaseScreen = () => {
           <Text style={styles.sectionSubtitle}>Add any relevant documents, contracts, or evidence.</Text>
           
           <TouchableOpacity style={styles.uploadArea} onPress={handleFilePick}>
-            <Text style={styles.uploadIcon}>📎</Text>
+            <Ionicons name="attach" size={32} color={colors.accent} style={{ marginBottom: 8 }} />
             <Text style={styles.uploadText}>Tap to browse files</Text>
           </TouchableOpacity>
 
@@ -151,7 +152,7 @@ const CreateCaseScreen = () => {
                 <View key={index} style={styles.fileItem}>
                   <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
                   <TouchableOpacity onPress={() => removeFile(index)}>
-                    <Text style={styles.fileRemove}>✕</Text>
+                    <Ionicons name="close-circle-outline" size={20} color={colors.error} />
                   </TouchableOpacity>
                 </View>
               ))}

@@ -237,13 +237,16 @@ export class AiService {
     }
   }
 
-  async analyzeDocument(fileUrl: string): Promise<string> {
+  async analyzeDocument(fileUrl: string, sessionId?: string, userId?: string, fileName?: string): Promise<string> {
     const apiUrl = this.configService.get<string>('PYTHON_AI_API_URL');
     const apiKey = this.configService.get<string>('PYTHON_AI_API_KEY');
 
     try {
       const response = await this.httpService.axiosRef.post(`${apiUrl}/analyze_document`, {
-        file_url: fileUrl
+        file_url: fileUrl,
+        session_id: sessionId,
+        user_id: userId,
+        file_name: fileName,
       }, {
         headers: { Authorization: `Bearer ${apiKey}` }
       });

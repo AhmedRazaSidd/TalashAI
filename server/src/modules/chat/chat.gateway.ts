@@ -297,5 +297,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.handleVoiceMessage(client, { sessionId, audioBase64: fullAudioBuffer.toString('base64') });
     }
   }
+
+  emitToSession(sessionId: string, event: string, data: any) {
+    if (this.server) {
+      this.server.to(sessionId).emit(event, data);
+    }
+  }
 }
 

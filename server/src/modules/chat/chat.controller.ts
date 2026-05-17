@@ -3,6 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ChatService } from './chat.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { AiService } from './ai.service';
+import { ChatGateway } from './chat.gateway';
 import { PaginationDto, CursorPaginationDto } from './dto/pagination.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -16,6 +17,7 @@ export class ChatController {
     private readonly chatService: ChatService,
     private readonly cloudinaryService: CloudinaryService,
     private readonly aiService: AiService,
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   @Get('categories')
@@ -182,13 +184,22 @@ export class ChatController {
     const message = await this.chatService.saveAttachmentMessage(sessionId, req.user.userId, fileUrl, file.originalname, req.user.role);
     
     // Trigger AI OCR Analysis in the background
-    this.aiService.analyzeDocument(fileUrl).then(async (analysis) => {
-       await this.chatService.saveAssistantMessage(
+    this.aiService.analyzeDocument(fileUrl, sessionId, req.user.userId, file.originalname).then(async (analysis) => {
+       const savedMsg = await this.chatService.saveAssistantMessage(
          sessionId, 
          req.user.userId, 
          `AI Document Analysis of "${file.originalname}":\n\n${analysis}`,
          'text'
        );
+
+       // Emit to Socket.io connection in real-time so it displays instantly on client
+       const responseText = `AI Document Analysis of "${file.originalname}":\n\n${analysis}`;
+       this.chatGateway.emitToSession(sessionId, 'message_done', {
+         fullMessage: responseText,
+         sessionId,
+         messageId: savedMsg._id.toString(),
+         audioUrl: null,
+       });
     }).catch(err => console.error('Background OCR failed', err));
 
     return {

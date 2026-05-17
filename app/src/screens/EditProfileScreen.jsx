@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, ActivityIndicator, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
@@ -57,11 +57,15 @@ const EditProfileScreen = () => {
     // 1. Upload Avatar if selected
     if (selectedFile) {
       const formData = new FormData();
-      formData.append('file', {
-        uri: selectedFile.uri,
-        name: selectedFile.name || 'avatar.jpg',
-        type: selectedFile.mimeType || 'image/jpeg',
-      });
+      if (Platform.OS === 'web' && selectedFile.file) {
+        formData.append('file', selectedFile.file);
+      } else {
+        formData.append('file', {
+          uri: selectedFile.uri,
+          name: selectedFile.name || 'avatar.jpg',
+          type: selectedFile.mimeType || 'image/jpeg',
+        });
+      }
       
       const avatarAction = await dispatch(uploadAvatar(formData));
       if (uploadAvatar.rejected.match(avatarAction)) {

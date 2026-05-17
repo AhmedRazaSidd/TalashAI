@@ -15,6 +15,7 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -249,11 +250,15 @@ const ChatScreen = () => {
         }));
 
         const formData = new FormData();
-        formData.append('file', {
-          uri: file.uri,
-          name: file.name,
-          type: file.mimeType || 'application/octet-stream',
-        });
+        if (Platform.OS === 'web' && file.file) {
+          formData.append('file', file.file);
+        } else {
+          formData.append('file', {
+            uri: file.uri,
+            name: file.name,
+            type: file.mimeType || 'application/octet-stream',
+          });
+        }
 
         // Send to backend endpoint
         const response = await axiosClient.post(`/chat/sessions/${sessionId}/attachments`, formData, {
@@ -303,6 +308,64 @@ const ChatScreen = () => {
       );
     };
 
+    const renderBubbleContent = () => {
+      if (item.type === 'voice' || item.type === 'audio' || item.audioUrl) {
+        return <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />;
+      }
+      
+      if (item.type === 'attachment' || item.fileUrl) {
+        const url = item.fileUrl || '';
+        const isImage = /\.(png|jpe?g|gif|webp|bmp)$/i.test(url) || url.includes('/image/upload/') || (item.content && /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.content));
+        
+        if (isImage && url) {
+          return (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => Linking.openURL(url).catch(() => {})}
+            >
+              <Image
+                source={{ uri: url }}
+                style={{
+                  width: 200,
+                  height: 150,
+                  borderRadius: 12,
+                  marginBottom: 4,
+                }}
+                resizeMode="cover"
+              />
+              {item.content ? (
+                <Text style={[
+                  styles.bubbleText,
+                  isUser ? styles.userText : styles.aiText,
+                  { fontSize: 12, opacity: 0.8, marginTop: 4 }
+                ]}>
+                  {item.content}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+          );
+        }
+        
+        return (
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center' }}
+            onPress={() => url && Linking.openURL(url).catch(() => {})}
+          >
+            <Text style={{ fontSize: 20, marginRight: 8 }}>📄</Text>
+            <Text style={[
+              styles.bubbleText,
+              isUser ? styles.userText : styles.aiText,
+              { textDecorationLine: 'underline' }
+            ]}>
+              {item.content || 'Document'}
+            </Text>
+          </TouchableOpacity>
+        );
+      }
+      
+      return renderTextContent(item.content || item.text);
+    };
+
     return (
       <View style={isUser ? styles.userBubbleContainer : styles.aiBubbleContainer}>
         {!isUser && (
@@ -323,25 +386,7 @@ const ChatScreen = () => {
             isUser ? styles.userBubble : (isLawyer ? styles.lawyerBubble : styles.aiBubble),
             item.tempId && styles.pendingBubble,
           ]}>
-            {(item.type === 'voice' || item.type === 'audio' || item.audioUrl) ? (
-              <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />
-            ) : item.type === 'attachment' || item.fileUrl ? (
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => {})}
-              >
-                <Text style={{ fontSize: 20, marginRight: 8 }}>📄</Text>
-                <Text style={[
-                  styles.bubbleText,
-                  isUser ? styles.userText : styles.aiText,
-                  { textDecorationLine: 'underline' }
-                ]}>
-                  {item.content || 'Document'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              renderTextContent(item.content || item.text)
-            )}
+            {renderBubbleContent()}
 
             {/* Bottom row: bookmark star + timestamp */}
             <View style={styles.messageMeta}>

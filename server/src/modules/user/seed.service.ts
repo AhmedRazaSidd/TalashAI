@@ -36,12 +36,12 @@ export class SeedService {
 
       this.logger.log('2. Seeding Categories...');
       const categories = [
-        { name: 'Property Law', icon: '🏠' },
-        { name: 'Family & Marriage', icon: '👨‍👩‍👧' },
-        { name: 'Criminal Defense', icon: '⚖️' },
-        { name: 'Labor & Employment', icon: '💼' },
-        { name: 'Financial & Tax', icon: '💰' },
-        { name: 'Civil Litigation', icon: '📜' },
+        { name: 'Property Law', icon: 'home' },
+        { name: 'Family & Marriage', icon: 'people' },
+        { name: 'Criminal Defense', icon: 'shield' },
+        { name: 'Labor & Employment', icon: 'briefcase' },
+        { name: 'Financial & Tax', icon: 'cash' },
+        { name: 'Civil Litigation', icon: 'document' },
       ];
       try { await this.categoryModel.insertMany(categories); } catch (e) { this.logger.error('Failed to insert Categories'); throw e; }
 

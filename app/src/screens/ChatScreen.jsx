@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  TextInput, 
-  SafeAreaView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  SafeAreaView,
   FlatList,
   Animated,
   Dimensions,
@@ -40,12 +40,12 @@ const ChatScreen = () => {
   const dispatch = useDispatch();
   const route = useRoute();
   const navigation = useNavigation();
-  
+
   const user = useSelector(state => state.auth.user);
   const userName = user?.name || 'User';
-  
+
   const { sessions, currentSessionMessages, loadingMessages } = useSelector(state => state.chat);
-  
+
   // Accept sessionId from params, or null for a new session
   const [sessionId, setSessionId] = useState(route.params?.sessionId || null);
   const initialMessage = route.params?.initialMessage || null;
@@ -198,7 +198,7 @@ const ChatScreen = () => {
   const stopRecording = async () => {
     if (!recording) return;
     setIsRecording(false);
-    
+
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
@@ -243,7 +243,7 @@ const ChatScreen = () => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
-        
+
         // Optimistic UI for attachment
         const tempId = Date.now().toString();
         dispatch(addMessageToSession({
@@ -297,7 +297,7 @@ const ChatScreen = () => {
               <Text
                 key={i}
                 style={styles.linkText}
-                onPress={() => Linking.openURL(part).catch(() => {})}
+                onPress={() => Linking.openURL(part).catch(() => { })}
               >
                 {part}
               </Text>
@@ -313,16 +313,16 @@ const ChatScreen = () => {
       if (item.type === 'voice' || item.type === 'audio' || item.audioUrl) {
         return <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />;
       }
-      
+
       if (item.type === 'attachment' || item.fileUrl) {
         const url = item.fileUrl || '';
         const isImage = /\.(png|jpe?g|gif|webp|bmp)$/i.test(url) || url.includes('/image/upload/') || (item.content && /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.content));
-        
+
         if (isImage && url) {
           return (
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => Linking.openURL(url).catch(() => {})}
+              onPress={() => Linking.openURL(url).catch(() => { })}
             >
               <Image
                 source={{ uri: url }}
@@ -346,11 +346,11 @@ const ChatScreen = () => {
             </TouchableOpacity>
           );
         }
-        
+
         return (
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center' }}
-            onPress={() => url && Linking.openURL(url).catch(() => {})}
+            onPress={() => url && Linking.openURL(url).catch(() => { })}
           >
             <Text style={{ fontSize: 20, marginRight: 8 }}>📄</Text>
             <Text style={[
@@ -363,7 +363,7 @@ const ChatScreen = () => {
           </TouchableOpacity>
         );
       }
-      
+
       return renderTextContent(item.content || item.text);
     };
 
@@ -387,15 +387,13 @@ const ChatScreen = () => {
             isUser ? styles.userBubble : (isLawyer ? styles.lawyerBubble : styles.aiBubble),
             item.tempId && styles.pendingBubble,
           ]}>
-<<<<<<< HEAD
             {renderBubbleContent()}
-=======
             {(item.type === 'voice' || item.type === 'audio' || item.audioUrl) ? (
               <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />
             ) : item.type === 'attachment' || item.fileUrl ? (
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => {})}
+                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => { })}
               >
                 <Ionicons name="document-text" size={20} color={isUser ? "#000000" : colors.accent} style={{ marginRight: 8 }} />
                 <Text style={[
@@ -409,7 +407,6 @@ const ChatScreen = () => {
             ) : (
               renderTextContent(item.content || item.text)
             )}
->>>>>>> beb734b6a90829f6f5930de949ffc01011485024
 
             {/* Bottom row: bookmark star + timestamp */}
             <View style={styles.messageMeta}>
@@ -434,175 +431,175 @@ const ChatScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         {/* HEADER */}
-      <View style={styles.header}>
-        {/* LEFT: Back button (if navigated here) or hamburger drawer */}
-        <View style={styles.headerLeft}>
-          {navigation.canGoBack() ? (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={colors.accent} />
+        <View style={styles.header}>
+          {/* LEFT: Back button (if navigated here) or hamburger drawer */}
+          <View style={styles.headerLeft}>
+            {navigation.canGoBack() ? (
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color={colors.accent} />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={openDrawer} style={styles.drawerButton}>
+              <Ionicons name="menu" size={24} color={colors.accent} />
             </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity onPress={openDrawer} style={styles.drawerButton}>
-            <Ionicons name="menu" size={24} color={colors.accent} />
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* CENTER: Title */}
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{session?.title || 'Chat Session'}</Text>
-          <TouchableOpacity 
-            disabled={!session?.lawyerId || user?.role === 'lawyer'} 
-            onPress={() => navigation.navigate(SCREENS.LAWYER_PROFILE, { lawyerId: session.lawyerId })}
-          >
-            <View style={styles.headerSubtitleRow}>
-              {session?.status === 'with_lawyer' ? (
-                <>
-                  <Ionicons name="shield-checkmark" size={12} color={colors.accent} style={{ marginRight: 4 }} />
-                  <Text style={styles.headerSubtitleText}>Lawyer Active</Text>
-                </>
-              ) : session?.status === 'resolved' ? (
-                <>
-                  <Ionicons name="checkmark-circle" size={12} color="#4CD964" style={{ marginRight: 4 }} />
-                  <Text style={[styles.headerSubtitleText, { color: '#4CD964' }]}>Resolved</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="sparkles" size={12} color={colors.accent} style={{ marginRight: 4 }} />
-                  <Text style={styles.headerSubtitleText}>Talash AI</Text>
-                </>
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
-        
-        {/* RIGHT: Action icons */}
-        <View style={styles.headerActions}>
-          {user?.role === 'lawyer' && session?.status !== 'resolved' && (
-            <TouchableOpacity style={styles.iconButton} onPress={async () => {
-              try {
-                await axiosClient.patch(`/chat/sessions/${sessionId}`, { status: 'resolved' });
-                Alert.alert('Success', 'Case marked as resolved');
-                navigation.goBack();
-              } catch (err) {
-                Alert.alert('Error', 'Failed to resolve case');
-              }
-            }}>
-              <Ionicons name="checkmark-circle-outline" size={20} color={colors.accent} />
+          {/* CENTER: Title */}
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{session?.title || 'Chat Session'}</Text>
+            <TouchableOpacity
+              disabled={!session?.lawyerId || user?.role === 'lawyer'}
+              onPress={() => navigation.navigate(SCREENS.LAWYER_PROFILE, { lawyerId: session.lawyerId })}
+            >
+              <View style={styles.headerSubtitleRow}>
+                {session?.status === 'with_lawyer' ? (
+                  <>
+                    <Ionicons name="shield-checkmark" size={12} color={colors.accent} style={{ marginRight: 4 }} />
+                    <Text style={styles.headerSubtitleText}>Lawyer Active</Text>
+                  </>
+                ) : session?.status === 'resolved' ? (
+                  <>
+                    <Ionicons name="checkmark-circle" size={12} color="#4CD964" style={{ marginRight: 4 }} />
+                    <Text style={[styles.headerSubtitleText, { color: '#4CD964' }]}>Resolved</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={12} color={colors.accent} style={{ marginRight: 4 }} />
+                    <Text style={styles.headerSubtitleText}>Talash AI</Text>
+                  </>
+                )}
+              </View>
             </TouchableOpacity>
-          )}
-          {user?.role === 'lawyer' && (
-            <TouchableOpacity style={styles.iconButton} onPress={async () => {
-              try {
-                const res = await axiosClient.get(`/chat/sessions/${sessionId}/summary`);
-                setAiSummary(res.data.data.summary);
-                setShowSummary(true);
-              } catch (err) {
-                Alert.alert('Error', 'Could not generate summary.');
-              }
-            }}>
-              <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.iconButton} onPress={() => sessionId && navigation.navigate(SCREENS.CHAT_DETAILS, { sessionId })}>
-            <Ionicons name="information-circle-outline" size={20} color={colors.accent} />
-          </TouchableOpacity>
-        </View>
-      </View>
+          </View>
 
-      {/* AI SUMMARY MODAL */}
-      {showSummary && (
-        <View style={styles.summaryOverlay}>
-          <View style={styles.summaryModal}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-              <Ionicons name="sparkles" size={20} color={colors.accent} style={{ marginRight: 8 }} />
-              <Text style={[styles.summaryTitle, { marginBottom: 0 }]}>AI Case Brief</Text>
-            </View>
-            <ScrollView style={{ maxHeight: 300 }}>
-              <Text style={styles.summaryText}>{aiSummary}</Text>
-            </ScrollView>
-            <TouchableOpacity style={styles.closeSummary} onPress={() => setShowSummary(false)}>
-              <Text style={styles.closeSummaryText}>Close Brief</Text>
+          {/* RIGHT: Action icons */}
+          <View style={styles.headerActions}>
+            {user?.role === 'lawyer' && session?.status !== 'resolved' && (
+              <TouchableOpacity style={styles.iconButton} onPress={async () => {
+                try {
+                  await axiosClient.patch(`/chat/sessions/${sessionId}`, { status: 'resolved' });
+                  Alert.alert('Success', 'Case marked as resolved');
+                  navigation.goBack();
+                } catch (err) {
+                  Alert.alert('Error', 'Failed to resolve case');
+                }
+              }}>
+                <Ionicons name="checkmark-circle-outline" size={20} color={colors.accent} />
+              </TouchableOpacity>
+            )}
+            {user?.role === 'lawyer' && (
+              <TouchableOpacity style={styles.iconButton} onPress={async () => {
+                try {
+                  const res = await axiosClient.get(`/chat/sessions/${sessionId}/summary`);
+                  setAiSummary(res.data.data.summary);
+                  setShowSummary(true);
+                } catch (err) {
+                  Alert.alert('Error', 'Could not generate summary.');
+                }
+              }}>
+                <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.iconButton} onPress={() => sessionId && navigation.navigate(SCREENS.CHAT_DETAILS, { sessionId })}>
+              <Ionicons name="information-circle-outline" size={20} color={colors.accent} />
             </TouchableOpacity>
           </View>
         </View>
-      )}
 
-      {/* CHAT MESSAGES AREA */}
-      {loadingMessages && currentSessionMessages.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={[...currentSessionMessages].reverse()}
-          keyExtractor={(item, index) => item._id?.toString() || index.toString()}
-          renderItem={renderMessage}
-          style={styles.messageList}
-          contentContainerStyle={styles.messageListContent}
-          inverted
-          removeClippedSubviews={false}
-          showsVerticalScrollIndicator={true}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          initialNumToRender={15}
-        />
-      )}
-
-      {isTyping && (
-        <View style={styles.typingIndicatorContainer}>
-          <Text style={styles.typingText}>Talash AI is thinking...</Text>
-        </View>
-      )}
-
-      {/* BOTTOM INPUT BAR */}
-      <View style={styles.bottomInputBar}>
-        <TouchableOpacity style={styles.paperclipButton} onPress={handleAttachment}>
-          <Ionicons name="attach" size={22} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        <TextInput
-          style={[
-            styles.chatInput, 
-            isFocused && styles.chatInputFocused,
-            i18n.language === 'ur' && styles.urduInput
-          ]}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder={isRecording ? (i18n.language === 'ur' ? "آڈیو ریکارڈ ہو رہی ہے..." : "Recording audio...") : (t('typeQuestion') || 'Message')}
-          placeholderTextColor="#888888"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          editable={!isTyping && !isRecording}
-          multiline
-        />
-
-        {inputText.trim().length > 0 ? (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.sendButton, isTyping && { opacity: 0.5 }]} 
-            onPress={handleSend}
-            disabled={isTyping}
-          >
-            <Ionicons name="send" size={18} color={colors.accent} />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.micButton, isRecording && { backgroundColor: colors.error }]} 
-            onPressIn={startRecording}
-            onPressOut={stopRecording}
-            disabled={isTyping}
-          >
-            <Ionicons name={isRecording ? "stop" : "mic"} size={20} color={isRecording ? "#FFFFFF" : colors.accent} />
-          </TouchableOpacity>
+        {/* AI SUMMARY MODAL */}
+        {showSummary && (
+          <View style={styles.summaryOverlay}>
+            <View style={styles.summaryModal}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <Ionicons name="sparkles" size={20} color={colors.accent} style={{ marginRight: 8 }} />
+                <Text style={[styles.summaryTitle, { marginBottom: 0 }]}>AI Case Brief</Text>
+              </View>
+              <ScrollView style={{ maxHeight: 300 }}>
+                <Text style={styles.summaryText}>{aiSummary}</Text>
+              </ScrollView>
+              <TouchableOpacity style={styles.closeSummary} onPress={() => setShowSummary(false)}>
+                <Text style={styles.closeSummaryText}>Close Brief</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
-      </View>
+
+        {/* CHAT MESSAGES AREA */}
+        {loadingMessages && currentSessionMessages.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.accent} />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={[...currentSessionMessages].reverse()}
+            keyExtractor={(item, index) => item._id?.toString() || index.toString()}
+            renderItem={renderMessage}
+            style={styles.messageList}
+            contentContainerStyle={styles.messageListContent}
+            inverted
+            removeClippedSubviews={false}
+            showsVerticalScrollIndicator={true}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            initialNumToRender={15}
+          />
+        )}
+
+        {isTyping && (
+          <View style={styles.typingIndicatorContainer}>
+            <Text style={styles.typingText}>Talash AI is thinking...</Text>
+          </View>
+        )}
+
+        {/* BOTTOM INPUT BAR */}
+        <View style={styles.bottomInputBar}>
+          <TouchableOpacity style={styles.paperclipButton} onPress={handleAttachment}>
+            <Ionicons name="attach" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TextInput
+            style={[
+              styles.chatInput,
+              isFocused && styles.chatInputFocused,
+              i18n.language === 'ur' && styles.urduInput
+            ]}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder={isRecording ? (i18n.language === 'ur' ? "آڈیو ریکارڈ ہو رہی ہے..." : "Recording audio...") : (t('typeQuestion') || 'Message')}
+            placeholderTextColor="#888888"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            editable={!isTyping && !isRecording}
+            multiline
+          />
+
+          {inputText.trim().length > 0 ? (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.sendButton, isTyping && { opacity: 0.5 }]}
+              onPress={handleSend}
+              disabled={isTyping}
+            >
+              <Ionicons name="send" size={18} color={colors.accent} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.micButton, isRecording && { backgroundColor: colors.error }]}
+              onPressIn={startRecording}
+              onPressOut={stopRecording}
+              disabled={isTyping}
+            >
+              <Ionicons name={isRecording ? "stop" : "mic"} size={20} color={isRecording ? "#FFFFFF" : colors.accent} />
+            </TouchableOpacity>
+          )}
+        </View>
       </KeyboardAvoidingView>
 
       {/* DRAWER */}
@@ -622,8 +619,8 @@ const ChatScreen = () => {
 
         <ScrollView style={styles.drawerScroll} contentContainerStyle={styles.drawerScrollContent}>
           {sessions.map(item => (
-            <TouchableOpacity 
-              key={item._id} 
+            <TouchableOpacity
+              key={item._id}
               style={styles.historyItem}
               onPress={() => {
                 closeDrawer();
@@ -721,13 +718,13 @@ const styles = StyleSheet.create({
   },
   paperclipIcon: { fontSize: 22 },
   chatInput: {
-    flex: 1, backgroundColor: '#222222', borderRadius: 22, color: '#FFFFFF', 
-    fontSize: 15, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, 
+    flex: 1, backgroundColor: '#222222', borderRadius: 22, color: '#FFFFFF',
+    fontSize: 15, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12,
     maxHeight: 120, minHeight: 44,
   },
   chatInputFocused: { backgroundColor: '#2a2a2a' },
-  actionButton: { 
-    width: 44, height: 44, borderRadius: 22, 
+  actionButton: {
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center', marginBottom: 2,
   },
   sendButton: { backgroundColor: 'rgba(201, 168, 76, 0.15)', borderWidth: 1, borderColor: colors.accent },

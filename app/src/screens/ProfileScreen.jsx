@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { logoutUser } from '../store/slices/authSlice';
 import SCREENS from '../constants/screenNames';
 import colors from '../theme/colors';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const ProfileScreen = () => {
   const { t } = useTranslation();
@@ -27,12 +28,12 @@ const ProfileScreen = () => {
   };
 
   const menuItems = [
-    { id: 0, icon: '✎', title: 'Edit Profile', action: () => navigation.navigate('EditProfile') },
-    { id: 1, icon: '◰', title: t('myCases').replace('📋  ', ''), action: () => navigation.navigate(SCREENS.HOME) },
-    { id: 2, icon: '◩', title: t('chatHistoryMenu').replace('💬  ', ''), action: () => navigation.navigate(SCREENS.CHAT) },
-    { id: 3, icon: '⌬', title: 'Security Settings', action: () => navigation.navigate(SCREENS.SECURITY_SETTINGS) },
-    { id: 4, icon: '☏', title: 'Support & Help', action: () => navigation.navigate(SCREENS.SUPPORT) },
-    { id: 5, icon: '💳', title: 'Subscription Plans', action: () => navigation.navigate(SCREENS.SUBSCRIPTION_PLANS) },
+    { id: 0, icon: (color) => <Ionicons name="pencil-sharp" size={18} color={color} />, title: 'Edit Profile', action: () => navigation.navigate('EditProfile') },
+    { id: 1, icon: (color) => <Ionicons name="briefcase-sharp" size={18} color={color} />, title: t('myCases').replace('📋  ', ''), action: () => navigation.navigate(SCREENS.HOME) },
+    { id: 2, icon: (color) => <Ionicons name="chatbubbles-sharp" size={18} color={color} />, title: t('chatHistoryMenu').replace('💬  ', ''), action: () => navigation.navigate(SCREENS.CHAT) },
+    { id: 3, icon: (color) => <Ionicons name="lock-closed-sharp" size={18} color={color} />, title: 'Security Settings', action: () => navigation.navigate(SCREENS.SECURITY_SETTINGS) },
+    { id: 4, icon: (color) => <Ionicons name="help-circle-sharp" size={18} color={color} />, title: 'Support & Help', action: () => navigation.navigate(SCREENS.SUPPORT) },
+    { id: 5, icon: (color) => <Ionicons name="card-sharp" size={18} color={color} />, title: 'Subscription Plans', action: () => navigation.navigate(SCREENS.SUBSCRIPTION_PLANS) },
   ];
 
   return (
@@ -48,7 +49,7 @@ const ProfileScreen = () => {
           <View style={styles.headerSpacer} />
           <Text style={styles.headerTitle}>{t('profile')}</Text>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutIconBtn}>
-            <Text style={styles.logoutIcon}>🚪</Text>
+            <Ionicons name="log-out-outline" size={22} color={colors.error} />
           </TouchableOpacity>
         </View>
 
@@ -63,9 +64,12 @@ const ProfileScreen = () => {
               </View>
             )}
           </View>
-          <Text style={styles.userName}>
-            {userName} {user?.subscriptionStatus === 'active' && '👑'}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+            <Text style={[styles.userName, { marginTop: 0 }]}>{userName}</Text>
+            {user?.subscriptionStatus === 'active' && (
+              <Ionicons name="sparkles" size={16} color="#FFD700" style={{ marginLeft: 6 }} />
+            )}
+          </View>
           {user?.subscriptionStatus === 'active' && (
             <View style={styles.premiumBadge}>
               <Text style={styles.premiumBadgeText}>
@@ -74,23 +78,29 @@ const ProfileScreen = () => {
             </View>
           )}
           <Text style={styles.userPhone}>{userPhone}</Text>
-          <Text style={styles.userDetails}>📍 {userCity}  •  👤 {userGender}</Text>
+          <View style={styles.detailsRow}>
+            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.detailsText}>{userCity}</Text>
+            <Text style={styles.detailsDivider}>•</Text>
+            <Ionicons name="person-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.detailsText}>{userGender}</Text>
+          </View>
         </View>
 
         {/* SECTION 3 — STATS ROW */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>⚖️</Text>
+            <Ionicons name="document-text-outline" size={20} color={colors.accent} style={{ marginBottom: 4 }} />
             <Text style={styles.statNumber}>3</Text>
             <Text style={styles.statLabel}>{t('casesFiled')}</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>⏳</Text>
+            <Ionicons name="time-outline" size={20} color={colors.accent} style={{ marginBottom: 4 }} />
             <Text style={styles.statNumber}>1</Text>
             <Text style={styles.statLabel}>{t('pending')}</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>✅</Text>
+            <Ionicons name="checkmark-done-circle-outline" size={20} color={colors.accent} style={{ marginBottom: 4 }} />
             <Text style={styles.statNumber}>5</Text>
             <Text style={styles.statLabel}>{t('resolved')}</Text>
           </View>
@@ -102,17 +112,17 @@ const ProfileScreen = () => {
           {menuItems.map((item) => (
             <TouchableOpacity key={item.id} style={styles.menuItem} onPress={item.action}>
               <View style={styles.menuItemLeft}>
-                <Text style={styles.menuItemIcon}>{item.icon}</Text>
+                {item.icon(colors.accent)}
                 <Text style={styles.menuItemTitle}>{item.title}</Text>
               </View>
-              <Text style={styles.menuItemArrow}>›</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* SECTION 5 — LOGOUT BUTTON */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>{t('logout')}</Text>
+          <Ionicons name="log-out-outline" size={22} color={colors.error} />
+          <Text style={styles.logoutButtonText}>{('logout')}</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -203,6 +213,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
+  detailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 4,
+  },
+  detailsText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  detailsDivider: {
+    color: colors.border,
+    marginHorizontal: 4,
+  },
 
   // SECTION 3 — STATS ROW
   statsRow: {
@@ -281,8 +305,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 69, 58, 0.1)',
     borderRadius: 12,
     padding: 18,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
   logoutButtonText: {
     color: colors.error,

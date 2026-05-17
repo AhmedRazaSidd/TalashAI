@@ -8,6 +8,7 @@ import CustomInput from '../components/CustomInput';
 import CustomButton from '../components/CustomButton';
 import colors from '../theme/colors';
 import { updateProfileSuccess } from '../store/slices/authSlice'; // To sync redux state
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const SecuritySettingsScreen = () => {
   const navigation = useNavigation();
@@ -84,7 +85,7 @@ const SecuritySettingsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>‹ Back</Text>
+          <Ionicons name="arrow-back" size={24} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Security Settings</Text>
         <View style={{ width: 50 }} />

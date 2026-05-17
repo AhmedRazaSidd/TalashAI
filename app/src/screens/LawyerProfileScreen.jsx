@@ -4,6 +4,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import colors from '../theme/colors';
 import axiosClient from '../api/axiosClient';
 import SCREENS from '../constants/screenNames';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const LawyerProfileScreen = () => {
   const route = useRoute();
@@ -35,7 +36,7 @@ const LawyerProfileScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="arrow-back" size={24} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Professional Profile</Text>
         <View style={{width: 24}} />

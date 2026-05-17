@@ -10,6 +10,7 @@ import GenderToggle from '../components/GenderToggle';
 import CustomButton from '../components/CustomButton';
 import { updateUserProfile, uploadAvatar, clearError } from '../store/slices/authSlice';
 import colors from '../theme/colors';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const EditProfileScreen = () => {
   const { t } = useTranslation();
@@ -88,7 +89,7 @@ const EditProfileScreen = () => {
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backIcon}>←</Text>
+            <Ionicons name="arrow-back" size={24} color={colors.accent} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Profile</Text>
           <View style={styles.rightPlaceholder} />
@@ -106,7 +107,7 @@ const EditProfileScreen = () => {
                 </View>
               )}
               <View style={styles.editIconBadge}>
-                <Text style={styles.editIconText}>✏️</Text>
+                <Ionicons name="pencil" size={14} color={colors.accent} />
               </View>
             </View>
           </TouchableOpacity>

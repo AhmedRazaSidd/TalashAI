@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import axiosClient from '../api/axiosClient';
 import { updateProfileSuccess } from '../store/slices/authSlice';
 import colors from '../theme/colors';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const { width } = Dimensions.get('window');
 
@@ -106,7 +107,7 @@ const SubscriptionPlansScreen = () => {
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>‹ Back</Text>
+          <Ionicons name="arrow-back" size={24} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Subscription Plans</Text>
         <View style={{ width: 50 }} />
@@ -124,7 +125,9 @@ const SubscriptionPlansScreen = () => {
           {user?.subscriptionStatus === 'active' ? (
             <View style={{ marginTop: 8 }}>
               <View style={styles.activeRow}>
-                <Text style={styles.activePlanName}>👑 {user.subscriptionPlanId?.name || 'Premium Plan'}</Text>
+                <Text style={styles.activePlanName}>
+                  <Ionicons name="sparkles" size={16} color="#FFD700" /> {user.subscriptionPlanId?.name || 'Premium Plan'}
+                </Text>
                 <View style={styles.activeBadge}>
                   <Text style={styles.activeBadgeText}>ACTIVE</Text>
                 </View>
@@ -194,7 +197,7 @@ const SubscriptionPlansScreen = () => {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Confirm Checkout</Text>
               <TouchableOpacity onPress={() => setCheckoutVisible(false)} style={styles.closeModalBtn}>
-                <Text style={styles.closeModalText}>✕</Text>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 

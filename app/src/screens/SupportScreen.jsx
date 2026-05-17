@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import axiosClient from '../api/axiosClient';
 import colors from '../theme/colors';
 import CustomButton from '../components/CustomButton';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 const SupportScreen = () => {
   const navigation = useNavigation();
@@ -63,7 +64,7 @@ const SupportScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>‹ Back</Text>
+          <Ionicons name="arrow-back" size={24} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Support & Help</Text>
         <View style={{ width: 50 }} />
@@ -90,7 +91,7 @@ const SupportScreen = () => {
               >
                 <View style={styles.faqHeader}>
                   <Text style={styles.faqQuestion}>{faq.question}</Text>
-                  <Text style={styles.faqArrow}>{expandedFaq === index ? '▲' : '▼'}</Text>
+                  <Ionicons name={expandedFaq === index ? "chevron-up" : "chevron-down"} size={14} color={colors.accent} />
                 </View>
                 {expandedFaq === index && (
                   <Text style={styles.faqAnswer}>{faq.answer}</Text>

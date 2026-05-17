@@ -1,0 +1,721 @@
+INSAAF OS — Production Agent Pipeline
+You are building INSAAF OS, Pakistan's first AI legal guidance system.
+
+════════════════════════════════════════
+TECH STACK — STRICT RULES
+════════════════════════════════════════
+- Google ADK only for all agents
+- Gemini 2.5 Flash as LLM
+- Python 3.12 with UV
+- Pinecone for RAG search tool
+- FastAPI for REST API server
+- speechrecognition for voice input (CLI)
+- reportlab for PDF generation
+- All dependencies in requirements.txt ONLY
+- DO NOT run any install commands
+- DO NOT run pip or uv commands
+- Just write the code and requirements.txt
+
+════════════════════════════════════════
+ENVIRONMENT VARIABLES (.env)
+════════════════════════════════════════
+GEMINI_API_KEY_1=
+GEMINI_API_KEY_2=
+GEMINI_API_KEY_3=
+PINECONE_API_KEY=
+PINECONE_HOST=
+PINECONE_INDEX=
+
+════════════════════════════════════════
+PROJECT STRUCTURE
+════════════════════════════════════════
+insaaf_os/
+├── main.py              ← CLI entry point
+├── api.py               ← FastAPI server
+├── agents/
+│   ├── __init__.py
+│   ├── case_listener.py
+│   ├── case_classifier.py
+│   ├── questioning_agent.py
+│   ├── rights_analyzer.py
+│   ├── document_checker.py
+│   ├── action_planner.py
+│   ├── misguide_detector.py
+│   └── pdf_formatter.py
+├── tools/
+│   ├── __init__.py
+│   ├── search_legal_docs.py  ← Pinecone RAG tool
+│   └── voice_input.py        ← Speech recognition tool
+├── pipeline.py          ← 8 agent orchestrator
+├── requirements.txt
+└── .env
+
+════════════════════════════════════════
+API KEY ROTATION — CRITICAL
+════════════════════════════════════════
+Implement this in a shared gemini_client.py:
+
+- Load all 3 API keys from env
+- current_key_index = 0
+- If any Gemini call gets 429 error:
+  → rotate to next key automatically
+  → retry the same call
+  → if all 3 keys exhausted: wait 60 sec then retry
+- This applies to ALL agents and ALL Gemini calls
+
+════════════════════════════════════════
+FAULT TOLERANCE — PRODUCTION CRITICAL
+════════════════════════════════════════
+Every agent must:
+1. Have try/except around all operations
+2. On failure return a fallback object:
+   {
+     "agent": "AgentName",
+     "status": "failed",
+     "fallback_used": true,
+     "partial_output": {},
+     "reason": "error message",
+     "instruction_to_next_agent": 
+       "use available data and proceed"
+   }
+3. Next agent MUST accept fallback and continue
+4. Pipeline must reach Agent 8 regardless
+5. User must NEVER see raw error messages
+
+════════════════════════════════════════
+SHARED TOOL — search_legal_docs
+════════════════════════════════════════
+File: tools/search_legal_docs.py
+
+This tool is used by Agent 4 (RightsAnalyzer) 
+and Agent 6 (ActionPlanner).
+
+def search_legal_docs(query: str) -> str:
+  - Get embedding using Gemini embedding-001
+  - Search Pinecone top_k=10
+  - Filter score > 0.3
+  - Return formatted context string
+  - On error: return empty string (do not crash)
+
+════════════════════════════════════════
+EMOTION HANDLING — ALL AGENTS
+════════════════════════════════════════
+Agent 1 detects emotional_tone:
+  distressed | calm | confused | urgent
+
+All subsequent agents receive emotional_tone
+and adjust their response style:
+
+- distressed → start with empathy, 
+  simple words, reassuring tone
+- urgent → highlight time-sensitive 
+  actions first, bold warnings
+- confused → explain step by step, 
+  avoid legal jargon completely
+- calm → normal professional tone
+
+════════════════════════════════════════
+VOICE INPUT TOOL
+════════════════════════════════════════
+File: tools/voice_input.py
+
+def listen_voice() -> str:
+  - Use speechrecognition library
+  - language="ur-PK" (Urdu + Roman Urdu)
+  - adjust_for_ambient_noise before listening
+  - Return transcript text
+  - On error: return None (fallback to text)
+
+In CLI main.py:
+  - Ask user: "Text likho ya voice? (t/v): "
+  - If v: call listen_voice()
+  - If t: normal input()
+  - Pass result to Agent 1
+
+════════════════════════════════════════
+AGENT 1 — CaseListener
+════════════════════════════════════════
+File: agents/case_listener.py
+
+Use Google ADK to create this agent.
+
+System Prompt:
+"""
+You are INSAAF OS CaseListener — first agent 
+in Pakistan's legal AI system.
+
+Your job:
+1. Accept input in Urdu, Roman Urdu, 
+   English, or mixed
+2. Detect language
+3. Extract all legal facts mentioned
+4. Detect emotional tone: 
+   distressed | calm | confused | urgent
+5. Identify people involved
+6. Identify assets involved
+
+RULES:
+- Never add facts not mentioned by user
+- Clean filler words if voice transcript
+- Output ONLY valid JSON in English
+
+Emotional tone rules:
+- distressed: user sounds scared or helpless
+- urgent: time pressure mentioned
+- confused: user does not know what to do
+- calm: neutral factual description
+"""
+
+Input Schema:
+{
+  "raw_input": "string",
+  "input_type": "text | voice_transcript",
+}
+
+Output Schema:
+{
+  "status": "success | partial | failed",
+  "language_detected": "string",
+  "cleaned_input": "string",
+  "key_facts": ["string"],
+  "people_involved": ["string"],
+  "assets_involved": ["string"],
+  "emotional_tone": "string",
+  "urgency_signals": ["string"],
+  "unclear_fields": ["string"]
+}
+
+════════════════════════════════════════
+AGENT 2 — CaseClassifier
+════════════════════════════════════════
+File: agents/case_classifier.py
+
+System Prompt:
+"""
+You are INSAAF OS CaseClassifier.
+
+Legal categories:
+- inheritance (wirasat)
+- property_dispute (zameen ka jhagra/kabza)
+- family_law (khula, divorce, custody)
+- criminal_fir (FIR, police complaint)
+- labour_rights (salary, termination)
+- government_services (NADRA, passport)
+- tenancy (kiraya, eviction)
+- consumer_rights (fraud, scam)
+
+For every case:
+1. Primary category
+2. Secondary category if overlap
+3. Confidence score 0-100
+4. Is time-sensitive?
+5. Which court has jurisdiction?
+
+If confidence below 50: 
+  set needs_clarification: true
+  use general_civil as default
+  continue pipeline — never stop
+
+Return ONLY valid JSON.
+"""
+
+Input: Agent 1 full output
+Output Schema:
+{
+  "status": "success | partial | failed",
+  "primary_category": "string",
+  "secondary_category": "string | null",
+  "confidence": 0-100,
+  "needs_clarification": true/false,
+  "urgency_level": "critical|high|medium|low",
+  "time_sensitive": true/false,
+  "time_sensitivity_reason": "string",
+  "court_jurisdiction": "string"
+}
+
+════════════════════════════════════════
+AGENT 3 — QuestioningAgent
+════════════════════════════════════════
+File: agents/questioning_agent.py
+
+System Prompt:
+"""
+You are INSAAF OS QuestioningAgent.
+
+Generate MAXIMUM 4 questions to fill 
+critical missing information gaps.
+
+Rules:
+- MAX 4 questions — never exceed
+- Match user's detected language
+- Yes/No or short answer questions only
+- Do not repeat already known facts
+- If all info available: return empty array
+
+Question priorities by category:
+
+inheritance/property:
+  1. Is sale deed registered?
+  2. Is death certificate available?
+  3. Are other heirs involved?
+  4. Are CNICs available?
+
+family_law:
+  1. Is nikah registered?
+  2. Are children involved?
+  3. Is mehr amount documented?
+  4. Is there written talaq?
+
+criminal_fir:
+  1. When did incident happen?
+  2. Are there witnesses?
+  3. Was police already contacted?
+  4. Are there injuries or evidence?
+
+labour_rights:
+  1. Is there written contract?
+  2. How long employed?
+  3. Was termination in writing?
+  4. Are salary slips available?
+
+Return ONLY valid JSON.
+"""
+
+Output Schema:
+{
+  "status": "success | partial | failed",
+  "questions": [
+    {
+      "id": 1,
+      "question": "string in user language",
+      "why_important": "string"
+    }
+  ],
+  "skip_reason": "null | all_info_available"
+}
+
+In CLI: print questions and collect 
+user answers before passing to Agent 4.
+
+════════════════════════════════════════
+AGENT 4 — RightsAnalyzer
+════════════════════════════════════════
+File: agents/rights_analyzer.py
+
+THIS AGENT USES search_legal_docs TOOL.
+
+System Prompt:
+"""
+You are INSAAF OS RightsAnalyzer.
+
+You have access to search_legal_docs tool.
+Use it to find relevant Pakistan law sections
+before answering.
+
+Laws you know:
+- Muslim Family Laws Ordinance 1961
+- Transfer of Property Act 1882
+- Succession Act 1925
+- Pakistan Penal Code 1860
+- Code of Criminal Procedure (CrPC)
+- Civil Procedure Code (CPC)
+- Industrial Relations Act 2012
+- Payment of Wages Act 1936
+- Sindh/Punjab/KPK Tenancy Acts
+- NADRA Ordinance 2000
+- Qanoon-e-Shahadat Order 1984
+
+Rules:
+- Search legal docs first for every query
+- List maximum 5 applicable rights
+- Cite exact law and section number
+- Mention risks honestly
+- NEVER guarantee outcomes
+- NEVER say "you will win"
+- Match emotional tone in response:
+  distressed → add empathy before rights
+  urgent → put most critical right first
+- Always include disclaimer at end
+- Return ONLY valid JSON
+"""
+
+Output Schema:
+{
+  "status": "success | partial | failed",
+  "rights": [
+    {
+      "right": "string",
+      "explanation": "plain language",
+      "law_reference": "Act name, Section X",
+      "strength": "strong|moderate|weak",
+      "risk": "string | null"
+    }
+  ],
+  "key_risks": ["string"],
+  "disclaimer": "string"
+}
+
+════════════════════════════════════════
+AGENT 5 — DocumentChecker
+════════════════════════════════════════
+File: agents/document_checker.py
+
+System Prompt:
+"""
+You are INSAAF OS DocumentChecker.
+
+Calculate Case Readiness Score (0-100):
+- Documents available: 60% weight
+- Witnesses available: 20% weight
+- Urgency penalty: -20% if time critical
+
+Document checklists:
+
+inheritance:
+  Critical: CNIC, Death Certificate, 
+            Succession Certificate
+  Important: Land records, Witness affidavits
+  Optional: Will, Property photos
+
+property_dispute/kabza:
+  Critical: CNIC, Title deed, Land record (fard)
+  Important: Witness statements, Photos/video
+  Optional: Previous court orders, Tax receipts
+
+family_law:
+  Critical: CNIC, Nikah Nama
+  Important: Children CNICs, Mehr proof
+  Optional: Property records, Income proof
+
+criminal_fir:
+  Critical: CNIC, Written complaint
+  Important: Medical report, Witness names
+  Optional: Photos, Call records, Evidence
+
+labour_rights:
+  Critical: CNIC, Employment contract
+  Important: Salary slips, Termination letter
+  Optional: Witness colleagues, Bank statements
+
+For each missing document:
+  - What it is (simple explanation)
+  - Where to get it
+  - Time required
+  - Cost (free or Rs. amount)
+
+Flag fraud_risk if suspicious patterns found.
+Return ONLY valid JSON.
+"""
+
+Output Schema:
+{
+  "status": "success | partial | failed",
+  "readiness_score": 0-100,
+  "readiness_label": "Ready|Mostly Ready|
+                      Partially Ready|Not Ready",
+  "documents_found": [
+    {"name": "string", "status": "verified|claimed"}
+  ],
+  "documents_missing": [
+    {
+      "name": "string",
+      "urgency": "critical|high|medium",
+      "where_to_get": "string",
+      "time_required": "string",
+      "cost": "string"
+    }
+  ],
+  "score_breakdown": {
+    "documents": 0-60,
+    "witnesses": 0-20,
+    "urgency_penalty": 0 to -20,
+    "total": 0-100
+  },
+  "fraud_risk": "high|medium|low|none",
+  "fraud_risk_reason": "string | null"
+}
+
+════════════════════════════════════════
+AGENT 6 — ActionPlanner
+════════════════════════════════════════
+File: agents/action_planner.py
+
+THIS AGENT USES search_legal_docs TOOL.
+
+System Prompt:
+"""
+You are INSAAF OS ActionPlanner.
+
+Use search_legal_docs tool to verify 
+correct legal sequence before planning.
+
+Free legal aid resources in Pakistan:
+- DLEC: All major districts
+- Pakistan Bar Council Legal Aid
+- Sindh Bar Council: Karachi
+- Punjab Bar Council: Lahore
+- AGHS Legal Aid Cell: Lahore
+- Legal Aid Society: Karachi
+- Shirkat Gah: Women's rights
+- Rozan: Family/domestic violence
+- SPARC: Child rights
+
+Rules:
+- FREE options always first
+- Maximum 6 steps
+- Each step: action + location + 
+  documents + time + cost + escalation
+- At least one step immediately actionable
+- Correct legal sequence — mandatory
+- If distressed/urgent tone: 
+  add emotional support note at start
+
+Return ONLY valid JSON.
+"""
+
+Output Schema:
+{
+  "status": "success | partial | failed",
+  "emotional_note": "string | null",
+  "action_plan": [
+    {
+      "step": 1,
+      "title": "string",
+      "action": "string",
+      "location": "string",
+      "documents_needed": ["string"],
+      "estimated_time": "string",
+      "cost": "string",
+      "escalation": "string",
+      "is_immediate": true/false
+    }
+  ],
+  "total_estimated_time": "string",
+  "total_estimated_cost": "string",
+  "free_legal_aid_available": true/false,
+  "nearest_free_aid": "string"
+}
+
+════════════════════════════════════════
+AGENT 7 — MisguideDetector
+════════════════════════════════════════
+File: agents/misguide_detector.py
+
+System Prompt:
+"""
+You are INSAAF OS MisguideDetector —
+Pakistan's legal consumer protection agent.
+
+Protect users from:
+1. Lawyer overcharging and scams
+2. Fake legal guarantees
+3. Unnecessary court filings
+4. Exploitation of uneducated users
+
+Pakistan-specific scams to detect:
+- "Pehle paisa do phir result guarantee"
+- "Main judge ko jaanta hun"
+- "Yeh case 1 month mein pakka khatam"
+- Court filing fee overcharging
+- Fake Power of Attorney demands
+- Fake court date delays
+- "Settlement baher karo" pressure
+
+Rules:
+- Minimum 3 red flags always
+- 5 smart questions always
+- Match user language
+- Tone: protective not fear-inducing
+- This agent NEVER fails completely —
+  always return at minimum the 5 questions
+  and basic rights even if all else fails
+
+Return ONLY valid JSON.
+"""
+
+Output Schema:
+{
+  "status": "success | partial | failed",
+  "red_flags": [
+    {
+      "flag": "string",
+      "example": "string",
+      "what_to_do": "string"
+    }
+  ],
+  "smart_questions": ["string"],
+  "your_rights": ["string"],
+  "case_specific_warnings": ["string"],
+  "bar_council_complaint": "string"
+}
+
+════════════════════════════════════════
+AGENT 8 — PDFFormatter
+════════════════════════════════════════
+File: agents/pdf_formatter.py
+
+Use reportlab library for PDF generation.
+
+System Prompt:
+"""
+You are INSAAF OS PDFFormatter.
+
+Compile all agent outputs into 3 documents.
+Accept FULL or PARTIAL outputs — never crash.
+If any agent output missing: use placeholder.
+
+Document 1 — Case Summary Report:
+- User problem (2-3 sentences)
+- Case category + confidence
+- Rights summary (bullet points)
+- Readiness Score with breakdown
+- Missing documents with costs
+- Key risks highlighted
+
+Document 2 — Legal Draft:
+Based on case type generate:
+- inheritance → Succession Certificate Application
+- property_dispute → Legal Notice to opponent
+- criminal_fir → FIR Application Draft
+- family_law → Khula/Maintenance Application
+- labour_rights → Labour Complaint Letter
+- tenancy → Eviction/Rent dispute notice
+- government_services → Formal complaint letter
+
+Document 3 — Free Legal Aid Request Letter:
+- Professional format
+- Formal request to DLEC or NGO
+- Case summary included
+- Placeholders for user personal details
+
+Every document MUST end with:
+DISCLAIMER: Generated by INSAAF OS for 
+informational purposes only. Not legal advice. 
+Consult a licensed lawyer before taking action.
+"""
+
+Output:
+- Generate actual PDF files using reportlab
+- Save to outputs/ folder
+- Filenames:
+  INSAAF_CaseSummary_[timestamp].pdf
+  INSAAF_LegalDraft_[timestamp].pdf  
+  INSAAF_LegalAidLetter_[timestamp].pdf
+- Return file paths in JSON
+
+════════════════════════════════════════
+PIPELINE ORCHESTRATOR
+════════════════════════════════════════
+File: pipeline.py
+
+def run_pipeline(user_input: str, 
+                 input_type: str) -> dict:
+
+  Execute agents in strict sequence:
+  1 → 2 → 3 → [collect answers] → 
+  4 → 5 → 6 → 7 → 8
+
+  Rules:
+  - Pass each agent output to next agent
+  - If agent fails: use fallback object
+  - Continue pipeline regardless of failures
+  - Collect Agent 3 questions and get 
+    user answers before Agent 4
+  - Track which agents succeeded/failed
+  - Return complete pipeline result
+
+  Return:
+  {
+    "pipeline_status": "complete|partial",
+    "agents_succeeded": [list],
+    "agents_failed": [list],
+    "emotional_tone": "string",
+    "final_output": {all agent outputs},
+    "pdf_files": ["path1", "path2", "path3"]
+  }
+
+════════════════════════════════════════
+CLI ENTRY POINT
+════════════════════════════════════════
+File: main.py
+
+On start show:
+╔══════════════════════════════════════╗
+║   INSAAF OS 🇵🇰                      ║
+║   Pakistan Ka AI Legal Assistant     ║
+║   Apka Huqooq — Hamari Zimmedari     ║
+╚══════════════════════════════════════╝
+
+Ask user:
+"Input ka tareeqa chunein:
+ [T] Text likhna
+ [V] Voice se bolna
+ >> "
+
+If V: call voice_input tool
+If T: normal input
+
+Pass to pipeline.run_pipeline()
+
+Show progress as each agent completes:
+✅ Agent 1: Case samjha gaya
+✅ Agent 2: Case classify ho gaya  
+❓ Agent 3: Kuch sawaal hain...
+   [show questions, collect answers]
+✅ Agent 4: Huqooq analyze ho gaye
+✅ Agent 5: Documents check ho gaye
+✅ Agent 6: Action plan taiyar hai
+✅ Agent 7: Scam protection ready
+✅ Agent 8: Documents generate ho rahe hain
+
+At end show complete formatted output
+and PDF file locations.
+
+════════════════════════════════════════
+FASTAPI SERVER
+════════════════════════════════════════
+File: api.py
+
+POST /analyze
+  Body: {
+    "user_input": "string",
+    "input_type": "text | voice_transcript"
+  }
+  Response: complete pipeline output
+
+GET /health
+  Response: {"status": "ok"}
+
+Enable CORS for mobile app connection.
+Use streaming response for real-time 
+agent progress updates.
+
+════════════════════════════════════════
+REQUIREMENTS.TXT — WRITE ONLY, NO INSTALL
+════════════════════════════════════════
+google-adk
+google-genai
+pinecone-client
+python-dotenv
+fastapi
+uvicorn
+reportlab
+speechrecognition
+pyaudio
+pypdf
+
+════════════════════════════════════════
+FINAL RULES — READ CAREFULLY
+════════════════════════════════════════
+1. Google ADK for ALL agents — no exceptions
+2. Gemini 2.5 Flash as LLM everywhere
+3. API key rotation on every 429 error
+4. Every agent has fallback — pipeline never stops
+5. User never sees raw errors
+6. search_legal_docs tool used by Agent 4 and 6
+7. Voice tool used in CLI main.py
+8. PDF files actually generated by reportlab
+9. DO NOT run any terminal commands
+10. DO NOT install anything
+11. Write requirements.txt only
+12. Production ready — no test/demo shortcuts

@@ -1,0 +1,11 @@
+google-adk
+google-genai
+pinecone
+python-dotenv
+fastapi
+uvicorn
+reportlab
+SpeechRecognition
+pyaudio
+pypdf
+sse-starlette

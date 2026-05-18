@@ -42,10 +42,10 @@ Emotional tone rules:
 """
 
 def _call_gemini(text: str, input_type: str):
-    client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))
+    client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
     prompt = f"Input type: {input_type}\nRaw Input: {text}"
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model='gemini-1.5-flash',
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,

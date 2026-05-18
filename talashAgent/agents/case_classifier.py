@@ -50,11 +50,11 @@ If the language_detected is provided, ensure any explanatory text (like time_sen
 """
 
 def _call_gemini(agent1_output: dict):
-    client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))
+    client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
     lang = agent1_output.get("language_detected", "English")
     prompt = f"Target Language: {lang}\nAgent 1 Output:\n{json.dumps(agent1_output)}"
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model='gemini-1.5-flash',
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,

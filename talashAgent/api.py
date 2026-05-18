@@ -35,16 +35,16 @@ app.add_middleware(
 
 # Initialize Resilient Google Vertex AI Client & Model Fallbacks
 def get_fallback_list(requested_model: str) -> list:
-    if requested_model == "gemini-2.5-pro":
-        return ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3-flash-preview"]
-    elif requested_model == "gemini-2.5-flash":
-        return ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-3-flash-preview"]
-    elif requested_model == "gemini-2.5-flash-lite":
-        return ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3-flash-preview"]
-    elif requested_model == "gemini-3-flash-preview":
-        return ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+    if requested_model == "gemini-1.5-flash":
+        return ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash"]
+    elif requested_model == "gemini-1.5-flash":
+        return ["gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash"]
+    elif requested_model == "gemini-1.5-flash-lite":
+        return ["gemini-1.5-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash"]
+    elif requested_model == "gemini-1.5-flash":
+        return ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash"]
     else:
-        return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-3-flash-preview"]
+        return ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash"]
 
 class QuotaResilientModels:
     def __init__(self, client):
@@ -142,14 +142,11 @@ class QuotaResilientModels:
 
 class VertexClientWrapper:
     def __init__(self):
-        vertex_key = os.getenv("VERTEX_API_KEY")
-        if not vertex_key:
-            raise ValueError("VERTEX_API_KEY not configured in environment!")
-            
-        # Migrate fully to Vertex AI on Google Cloud (strict, no developer fallback mode)
+        # Migrate fully to Vertex AI on Google Cloud
         self.raw_client = genai.Client(
             vertexai=True,
-            api_key=vertex_key
+            project="talash-496612",
+            location="us-central1"
         )
         self.models = QuotaResilientModels(self.raw_client)
         print("[Vertex AI Client] Successfully initialized using Google Vertex AI API key.")
@@ -180,7 +177,7 @@ def extract_and_save_memories_task(user_id: str, prompt: str, response_text: str
         
         # Call Gemini 2.5 Flash to parse the facts
         res = client.raw_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',
             contents=history_context,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -303,7 +300,7 @@ async def chat(req: ChatRequest):
                 )
 
                 response_stream = client.models.generate_content_stream(
-                    model='gemini-2.5-flash',
+                    model='gemini-1.5-flash',
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
@@ -347,7 +344,7 @@ async def chat(req: ChatRequest):
                 system_instruction += "\n\n" + "=== COGNITIVE SYSTEM MEMORY ===" + memory_context + "==============================="
 
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-1.5-flash',
                 contents=req.prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -379,7 +376,7 @@ async def voice(req: VoiceRequest):
 
             if audio_part:
                 transcribe_res = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-1.5-flash',
                     contents=[audio_part, "Transcribe this audio exactly into Urdu/English text. Return ONLY the transcript."],
                 )
                 transcript = transcribe_res.text or "[Audio transcript empty]"
@@ -425,7 +422,7 @@ async def voice(req: VoiceRequest):
             )
 
             response_stream = client.models.generate_content_stream(
-                model='gemini-2.5-flash',
+                model='gemini-1.5-flash',
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -459,7 +456,7 @@ async def classify(req: ClassifyRequest):
             "Return ONLY the category name."
         )
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',
             contents=req.text,
             config=types.GenerateContentConfig(system_instruction=system_instruction)
         )
@@ -488,7 +485,7 @@ async def analyze_document(req: DocRequest):
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',
             contents=[doc_part, "Analyze this document."],
             config=types.GenerateContentConfig(system_instruction=system_instruction)
         )
@@ -503,7 +500,7 @@ async def analyze_document(req: DocRequest):
                     "and parties involved that can be remembered by a legal assistant chatbot."
                 )
                 summary_response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-1.5-flash',
                     contents=analysis_text,
                     config=types.GenerateContentConfig(system_instruction=summary_instruction)
                 )
@@ -541,7 +538,7 @@ async def summarize(req: SummarizeRequest):
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',
             contents=chat_history,
             config=types.GenerateContentConfig(system_instruction=system_instruction)
         )

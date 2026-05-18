@@ -21,7 +21,7 @@ def search_legal_docs(query: str) -> str:
 
         # Get embedding
         use_vertex = os.getenv("USE_VERTEX_AI", "true").lower() == "true"
-        client = genai.Client(vertexai=use_vertex, api_key=os.environ.get("VERTEX_API_KEY"))
+        client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
         response = client.models.embed_content(
             model='text-embedding-004',
             contents=query,

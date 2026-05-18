@@ -23,73 +23,84 @@ export class AiService {
     attachments: string[] = [],
     userId?: string,
   ): Promise<string> {
-    const apiUrl = this.configService.get<string>('PYTHON_AI_API_URL');
-    const apiKey = this.configService.get<string>('PYTHON_AI_API_KEY');
+    try {
+      client.emit('agent_stream', { trace: '🚀 Initializing Talash AI Pipeline...' });
 
-    if (!apiUrl) {
-      this.logger.error('PYTHON_AI_API_URL is not configured');
-      const fallbackMsg = "I am a fallback response because the AI API is not configured.";
-      client.emit('message_chunk', { chunk: fallbackMsg, sessionId });
-      return fallbackMsg;
-    }
+      // 1. Call Python FastAPI
+      const response = await this.httpService.axiosRef.post(
+        'http://localhost:8000/analyze',
+        {
+          message: content,
+          history: history,
+        }
+      );
 
-    const configs = await this.appConfigService.getPublicConfig();
-    const baseSystemPrompt = configs['ai_system_prompt'] || 'You are Talash AI, a high-performance legal assistant specialized in the Laws of Pakistan.';
-    
-    const systemPrompt = `
-      ${baseSystemPrompt}
-      
-      CORE KNOWLEDGE:
-      - You are an expert in Pakistani Law, including the Pakistan Penal Code (PPC), Civil Procedure Code (CPC), Family Laws, and Property Laws (Transfer of Property Act).
-      - You must provide guidance based on Pakistani legal precedents and statutes.
-      
-      DOCUMENT ANALYSIS MODE:
-      - If attachments are provided, you MUST inform the user that you have scanned their legal documents.
-      - Analyze the provided documents (images/PDFs) for relevant legal details like names, dates, and clauses.
-      - Explain the legal implications of these documents according to Pakistani law.
-      
-      CONTEXT:
-      - Current Case Category: ${category}
-      - Attached Documents: ${attachments.join(', ')}
-      
-      Stay professional, empathetic, and always remind the user that while you are an AI expert, they should eventually consult a registered lawyer (available in our Marketplace).
-    `;
+      const result = response.data;
 
-    return new Promise((resolve, reject) => {
-      let fullMessage = '';
+      // 2. As response comes back, emit socket events to frontend
+      
+      // Agent traces (simulated/extracted from response)
+      client.emit('agent_stream', {
+        trace: `✅ CaseClassifier — ${result.primary_category || category} ` + (result.readiness_score ? `${result.readiness_score}%` : '')
+      });
+      client.emit('agent_stream', { trace: '✅ ActionPlanner — Steps Generated' });
+      client.emit('agent_stream', { trace: '✅ MisguideDetector — Risk Analyzed' });
 
-      this.httpService.axiosRef
-        .post(
-          apiUrl,
-          {
-            prompt: content,
-            history: history,
-            system_prompt: systemPrompt,
-            attachments: attachments,
-            stream: true,
-            session_id: sessionId,
-            user_id: userId,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            responseType: 'stream',
-          },
-        )
-        .then((response) => {
-          const stream = response.data;
-          this.handleStream(stream, client, sessionId, (msg, audioUrl) => {
-             resolve(msg);
-          }, reject);
-        })
-        .catch((err) => {
-          this.logger.error('API call failed:', err);
-          client.emit('message_error', { error: 'Failed to connect to AI', sessionId });
-          resolve('Sorry, I encountered an error.');
+      // Final cards in this exact order:
+
+      // Card 1: Case Dashboard
+      client.emit('agent_stream', {
+        chunk: `\n\`\`\`json\n${JSON.stringify({
+          type: "dashboard",
+          score: result.readiness_score,
+          case_type: result.primary_category,
+          missing_docs: result.missing_docs_count,
+          risk: result.fraud_risk,
+          free_aid: result.free_aid_eligible
+        })}\n\`\`\`\n`
+      });
+
+      // Card 2: Action Plan
+      client.emit('agent_stream', {
+        chunk: `\n\`\`\`json\n${JSON.stringify({
+          type: "action_plan",
+          steps: result.action_plan
+        })}\n\`\`\`\n`
+      });
+
+      // Card 3: MisguideDetector
+      if (result.red_flags && result.red_flags.length > 0) {
+        client.emit('agent_stream', {
+          chunk: `\n\`\`\`json\n${JSON.stringify({
+            type: "misguide_alert",
+            flags: result.red_flags
+          })}\n\`\`\`\n`
         });
-    });
+      }
+
+      // Card 4: PDF Links
+      if (result.pdf_files && result.pdf_files.length > 0) {
+        // We'll iterate through files if there are multiple, or just pass the array if the frontend supports it.
+        // Based on ChatScreen modifications, data.url and data.filename are expected, so we'll emit one for each or the first.
+        const file = result.pdf_files[0];
+        client.emit('agent_stream', {
+          chunk: `\n\`\`\`json\n${JSON.stringify({
+            type: "pdf_link",
+            url: file.url || file,
+            filename: file.filename || 'Action_Plan.pdf'
+          })}\n\`\`\`\n`
+        });
+      }
+
+      // 3. Return full response text for saving
+      // Save a summarized string into the database instead of raw JSON
+      return `Case Dashboard: ${result.readiness_score}% Readiness. ${result.primary_category}. \nAction Plan generated with ${result.action_plan?.length || 0} steps.`;
+
+    } catch (err) {
+      this.logger.error('Python AI API call failed:', err);
+      client.emit('message_error', { error: 'Failed to process pipeline', sessionId });
+      return 'Sorry, the AI pipeline encountered an error.';
+    }
   }
 
   async processAudioMessage(

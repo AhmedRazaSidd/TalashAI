@@ -53,12 +53,12 @@ Rules:
 """
 
 def _call_gemini(combined_context: dict, search_context: str):
-    client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))
+    client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
     lang = combined_context.get("language_detected", "English")
     tone = combined_context.get("emotional_tone", "calm")
     prompt = f"Target Language: {lang}\nEmotional Tone: {tone}\n\nSearch Context:\n{search_context}\n\nAgent Context:\n{json.dumps(combined_context)}"
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model='gemini-1.5-flash',
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,

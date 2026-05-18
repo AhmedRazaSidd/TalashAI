@@ -64,7 +64,7 @@ def rephrase_question_gemini(question_text: str, user_confused_answer: str, lang
     try:
         import os
         from google import genai
-        client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))
+        client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
         system_instruction = (
             "You are a helpful, extremely friendly legal assistant. "
             f"The user is confused by the question: '{question_text}'. "
@@ -75,7 +75,7 @@ def rephrase_question_gemini(question_text: str, user_confused_answer: str, lang
             "Do not include any extra text, introduction, or explanation."
         )
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-1.5-flash',
             contents=f"Rephrase: {question_text}",
             config=genai.types.GenerateContentConfig(
                 system_instruction=system_instruction,

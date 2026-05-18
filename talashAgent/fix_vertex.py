@@ -13,11 +13,11 @@ for file_path in files_to_check:
     # 1. Update standard Agent client initializations
     content = content.replace(
         'client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))',
-        'client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")'
+        'client = genai.Client(vertexai=True, project="talash-496613", location="us-central1")'
     )
     content = content.replace(
         'client = genai.Client(vertexai=use_vertex, api_key=os.environ.get("VERTEX_API_KEY"))',
-        'client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")'
+        'client = genai.Client(vertexai=True, project="talash-496613", location="us-central1")'
     )
     
     # 2. Update VertexClientWrapper in api.py
@@ -33,7 +33,7 @@ for file_path in files_to_check:
     new_api_init = """# Migrate fully to Vertex AI on Google Cloud
         self.raw_client = genai.Client(
             vertexai=True,
-            project="talash-496612",
+            project="talash-496613",
             location="us-central1"
         )"""
     content = content.replace(old_api_init, new_api_init)
@@ -48,4 +48,4 @@ for file_path in files_to_check:
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-print("Updated all API connections to Vertex AI (talash-496612, us-central1) and gemini-1.5-flash.")
+print("Updated all API connections to Vertex AI (talash-496613, us-central1) and gemini-1.5-flash.")

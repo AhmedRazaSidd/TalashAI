@@ -1,4 +1,5 @@
 import asyncio
+import time
 from agents.case_listener import run_case_listener
 from agents.case_classifier import run_case_classifier
 from agents.questioning_agent import run_questioning_agent
@@ -62,9 +63,9 @@ def normalize_lang(lang_str):
 
 def rephrase_question_gemini(question_text: str, user_confused_answer: str, lang: str) -> str:
     try:
-        import os
         from google import genai
-        client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
+        from gemini_client import get_vertex_client, FAST_MODEL
+        client = get_vertex_client()
         system_instruction = (
             "You are a helpful, extremely friendly legal assistant. "
             f"The user is confused by the question: '{question_text}'. "
@@ -75,7 +76,7 @@ def rephrase_question_gemini(question_text: str, user_confused_answer: str, lang
             "Do not include any extra text, introduction, or explanation."
         )
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model=FAST_MODEL,
             contents=f"Rephrase: {question_text}",
             config=genai.types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -86,144 +87,152 @@ def rephrase_question_gemini(question_text: str, user_confused_answer: str, lang
         return question_text
 
 
-async def run_pipeline_stream(user_input: str, input_type: str, answer_callback=None, category_hint: str | None = None):
+async def call_agent_with_retry(agent_fn, *args, **kwargs):
+    max_attempts = 2
+    for attempt in range(max_attempts):
+        try:
+            res = await asyncio.to_thread(agent_fn, *args, **kwargs)
+            if res and res.get("status") != "failed":
+                return res
+            if attempt < max_attempts - 1:
+                print(f"[Pipeline Retry] ⚠️ {agent_fn.__name__} failed (attempt {attempt + 1}/{max_attempts}). Retrying in 1s...")
+                await asyncio.sleep(1)
+        except Exception as e:
+            if attempt < max_attempts - 1:
+                print(f"[Pipeline Retry] ⚠️ {agent_fn.__name__} raised exception: {e} (attempt {attempt + 1}/{max_attempts}). Retrying in 1s...")
+                await asyncio.sleep(1)
+            else:
+                raise e
+    # Final fallback attempt
+    return await asyncio.to_thread(agent_fn, *args, **kwargs)
+
+
+async def run_pipeline_stream(
+    user_input: str,
+    input_type: str,
+    answer_callback=None,
+    category_hint: str | None = None,
+    prior_context: dict | None = None,
+    target_agent: str | None = None,
+):
     context = {"category_hint": category_hint} if category_hint else {}
-    agents_succeeded = []
-    agents_failed = []
+    lang = "English"
+
+    if prior_context:
+        print(f"[Pipeline] Seeding {len(prior_context)} keys from prior_context: {list(prior_context.keys())}")
+        context.update(prior_context)
+        lang = normalize_lang(context.get("language_detected"))
+
+    steps = {
+        "CaseListener": {
+            "msg_key": "agent1",
+            "run": lambda callback: call_agent_with_retry(run_case_listener, user_input, input_type, on_trace=callback),
+            "update": lambda res: context.update(res)
+        },
+        "CaseClassifier": {
+            "msg_key": "agent2",
+            "run": lambda callback: call_agent_with_retry(run_case_classifier, context, on_trace=callback),
+            "update": lambda res: context.update(res)
+        },
+        "QuestioningAgent": {
+            "msg_key": "agent3_check",
+            "run": lambda callback: call_agent_with_retry(run_questioning_agent, context, on_trace=callback),
+            "update": lambda res: context.update({"questions_from_agent3": res.get("questions", [])})
+        },
+        "RightsAnalyzer": {
+            "msg_key": "agent4",
+            "run": lambda callback: call_agent_with_retry(run_rights_analyzer, context, on_trace=callback),
+            "update": lambda res: context.update({"rights_analysis": res})
+        },
+        "DocumentChecker": {
+            "msg_key": "agent5",
+            "run": lambda callback: call_agent_with_retry(run_document_checker, context, on_trace=callback),
+            "update": lambda res: context.update({"document_check": res})
+        },
+        "ActionPlanner": {
+            "msg_key": "agent6",
+            "run": lambda callback: call_agent_with_retry(run_action_planner, context, on_trace=callback),
+            "update": lambda res: context.update({"action_plan": res})
+        },
+        "MisguideDetector": {
+            "msg_key": "agent7",
+            "run": lambda callback: call_agent_with_retry(run_misguide_detector, context, on_trace=callback),
+            "update": lambda res: context.update({"scam_protection": res})
+        },
+        "PdfFormatter": {
+            "msg_key": "agent8",
+            "run": lambda callback: call_agent_with_retry(run_pdf_formatter, context, on_trace=callback),
+            "update": lambda res: context.update({"pdfs": res})
+        }
+    }
+
+    if not target_agent or target_agent not in steps:
+        yield {"type": "status", "message": f"❌ Error: target_agent '{target_agent}' not found."}
+        yield {"type": "final", "data": {"error": f"Invalid agent: {target_agent}"}}
+        return
+
+    step = steps[target_agent]
     
-    def check_rate_limit(res):
-        return "RATE_LIMIT_429" in str(res.get("reason", ""))
+    if target_agent == "CaseListener":
+        yield {"type": "status", "message": "🎯 Agent 1: Understanding your problem / Aapka masla samajh rahe hain..."}
+    else:
+        yield {"type": "status", "message": MESSAGES[lang][step["msg_key"]]}
 
-    # First agent, language not known yet, show bilingual
-    yield {"type": "status", "message": "🎯 Agent 1: Understanding your problem / Aapka masla samajh rahe hain..."}
-    res1 = await asyncio.to_thread(run_case_listener, user_input, input_type)
-    if check_rate_limit(res1):
-        yield {"type": "error", "message": MESSAGES["English"]["api_limit"]}
+    # Set up thread-safe trace queue and callback
+    trace_queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def on_trace(msg: str):
+        loop.call_soon_threadsafe(trace_queue.put_nowait, msg)
+
+    try:
+        # Run agent concurrently with queue polling
+        agent_task = asyncio.create_task(step["run"](on_trace))
+        
+        while not agent_task.done():
+            try:
+                trace_msg = await asyncio.wait_for(trace_queue.get(), timeout=0.1)
+                yield {"type": "status", "message": trace_msg}
+            except asyncio.TimeoutError:
+                continue
+
+        result = await agent_task
+
+        # Drain remaining traces
+        while not trace_queue.empty():
+            trace_msg = trace_queue.get_nowait()
+            yield {"type": "status", "message": trace_msg}
+        
+        # Check if the agent requested a pause
+        if result.get("pause_for_user") == True:
+            yield {"type": "status", "message": f"⏸️ {target_agent} paused for input..."}
+            yield {"type": "final", "data": {
+                "pause_for_user": True,
+                "agent": target_agent,
+                "question": result.get("question"),
+                "expected_input": result.get("expected_input"),
+                "partial_output": context
+            }}
+            return
+
+        # Otherwise, process the successful run
+        step["update"](result)
+
+        if target_agent == "CaseListener":
+            lang = normalize_lang(context.get("language_detected"))
+            yield {"type": "language", "language": lang}
+
+    except Exception as e:
+        print(f"Agent failed: {e}")
+        yield {"type": "final", "data": {"status": "failed", "error": str(e), "agent": target_agent}}
         return
-    if res1.get("status") == "failed": 
-        agents_failed.append("Agent 1")
-    else: 
-        agents_succeeded.append("Agent 1")
-    context.update(res1)
-    
-    lang = normalize_lang(context.get("language_detected"))
-    yield {"type": "language", "language": lang}
-    
-    yield {"type": "status", "message": MESSAGES[lang]["agent2"]}
-    res2 = await asyncio.to_thread(run_case_classifier, context)
-    if check_rate_limit(res2):
-        yield {"type": "error", "message": MESSAGES[lang]["api_limit"]}
-        return
-    if res2.get("status") == "failed": agents_failed.append("Agent 2")
-    else: agents_succeeded.append("Agent 2")
-    context.update(res2)
 
-    yield {"type": "status", "message": MESSAGES[lang]["agent3_check"]}
-    res3 = await asyncio.to_thread(run_questioning_agent, context)
-    if check_rate_limit(res3):
-        yield {"type": "error", "message": MESSAGES[lang]["api_limit"]}
-        return
-    if res3.get("status") == "failed": agents_failed.append("Agent 3")
-    else: agents_succeeded.append("Agent 3")
-    context.update({"questions_from_agent3": res3.get("questions", [])})
-
-    questions = res3.get("questions", [])
-    context["user_answers"] = []
-    if questions and answer_callback:
-        yield {"type": "status", "message": MESSAGES[lang]["agent3_questions"]}
-        for q in questions:
-            q_to_ask = q.copy()
-            while True:
-                ans_list = await answer_callback([q_to_ask])
-                if not ans_list:
-                    break
-                user_ans = ans_list[0].get("answer", "")
-                
-                # Check if confusing
-                ans_clean = user_ans.strip().lower()
-                confused = False
-                if not ans_clean:
-                    confused = True
-                else:
-                    confusing_keywords = ["matlb", "samaj", "kya", "?"]
-                    for kw in confusing_keywords:
-                        if kw in ans_clean:
-                            confused = True
-                            break
-                    if len([w for w in ans_clean.split() if w]) < 3:
-                        confused = True
-                
-                if confused:
-                    simplify_msg = {
-                        "English": "Simplifying question...",
-                        "Roman Urdu": "Sawaal aasan kar rahe hain...",
-                        "Urdu": "سوال آسان کر رہے ہیں..."
-                    }.get(lang, "Simplifying question...")
-                    yield {"type": "status", "message": simplify_msg}
-                    
-                    rephrased = await asyncio.to_thread(rephrase_question_gemini, q_to_ask.get("question"), user_ans, lang)
-                    q_to_ask["question"] = rephrased
-                else:
-                    context["user_answers"].append({
-                        "question_id": q.get("id"),
-                        "answer": user_ans
-                    })
-                    break
-
-    yield {"type": "status", "message": MESSAGES[lang]["agent4"]}
-    res4 = await asyncio.to_thread(run_rights_analyzer, context)
-    if check_rate_limit(res4):
-        yield {"type": "error", "message": MESSAGES[lang]["api_limit"]}
-        return
-    if res4.get("status") == "failed": agents_failed.append("Agent 4")
-    else: agents_succeeded.append("Agent 4")
-    context.update({"rights_analysis": res4})
-
-    yield {"type": "status", "message": MESSAGES[lang]["agent5"]}
-    res5 = await asyncio.to_thread(run_document_checker, context)
-    if check_rate_limit(res5):
-        yield {"type": "error", "message": MESSAGES[lang]["api_limit"]}
-        return
-    if res5.get("status") == "failed": agents_failed.append("Agent 5")
-    else: agents_succeeded.append("Agent 5")
-    context.update({"document_check": res5})
-
-    yield {"type": "status", "message": MESSAGES[lang]["agent6"]}
-    res6 = await asyncio.to_thread(run_action_planner, context)
-    if check_rate_limit(res6):
-        yield {"type": "error", "message": MESSAGES[lang]["api_limit"]}
-        return
-    if res6.get("status") == "failed": agents_failed.append("Agent 6")
-    else: agents_succeeded.append("Agent 6")
-    context.update({"action_plan": res6})
-
-    yield {"type": "status", "message": MESSAGES[lang]["agent7"]}
-    res7 = await asyncio.to_thread(run_misguide_detector, context)
-    if check_rate_limit(res7):
-        yield {"type": "error", "message": MESSAGES[lang]["api_limit"]}
-        return
-    if res7.get("status") == "failed": agents_failed.append("Agent 7")
-    else: agents_succeeded.append("Agent 7")
-    context.update({"scam_protection": res7})
-
-    yield {"type": "status", "message": MESSAGES[lang]["agent8"]}
-    res8 = await asyncio.to_thread(run_pdf_formatter, context)
-    if check_rate_limit(res8):
-        yield {"type": "error", "message": MESSAGES[lang]["api_limit"]}
-        return
-    if res8.get("status") == "failed": agents_failed.append("Agent 8")
-    else: agents_succeeded.append("Agent 8")
-    context.update({"pdfs": res8})
-
-    yield {"type": "status", "message": MESSAGES[lang]["complete"]}
-
+    # Agent completed successfully without pausing
     final_output = {
-        "pipeline_status": "complete" if not agents_failed else "partial",
-        "agents_succeeded": agents_succeeded,
-        "agents_failed": agents_failed,
-        "emotional_tone": context.get("emotional_tone", "calm"),
+        "pipeline_status": "agent_complete",
+        "agent": target_agent,
         "final_output": context,
-        "pdf_files": res8.get("pdf_files", [])
+        "pdf_files": context.get("pdfs", {}).get("pdf_files", []) if isinstance(context.get("pdfs"), dict) else []
     }
     
     yield {"type": "final", "data": final_output}

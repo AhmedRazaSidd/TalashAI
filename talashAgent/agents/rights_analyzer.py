@@ -1,10 +1,11 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import run_agent_with_retry
-from google import genai
+from gemini_client import get_vertex_client, DEEP_MODEL
 import os
-from tools.search_legal_docs import search_legal_docs
+from tools.legal_tools import search_legal_docs, search_court_procedures
+
+client = get_vertex_client()
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +54,11 @@ Rules:
 """
 
 def _call_gemini(combined_context: dict, search_context: str):
-    client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
     lang = combined_context.get("language_detected", "English")
     tone = combined_context.get("emotional_tone", "calm")
     prompt = f"Target Language: {lang}\nEmotional Tone: {tone}\n\nSearch Context:\n{search_context}\n\nAgent Context:\n{json.dumps(combined_context)}"
     response = client.models.generate_content(
-        model='gemini-1.5-flash',
+        model=DEEP_MODEL,
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -68,11 +68,32 @@ def _call_gemini(combined_context: dict, search_context: str):
     )
     return response.text
 
-def run_rights_analyzer(combined_context: dict) -> dict:
+def run_rights_analyzer(combined_context: dict, on_trace=None) -> dict:
     try:
         query = combined_context.get("cleaned_input", "") or " ".join(combined_context.get("key_facts", []))
-        search_context = search_legal_docs(query)
-        result_str = run_agent_with_retry(_call_gemini, combined_context, search_context)
+        
+        # Dynamic tool execution & streaming traces
+        docs_results = search_legal_docs(query, on_trace=on_trace)
+        procedures_results = search_court_procedures(query, on_trace=on_trace)
+        
+        # Format the RAG context for the model
+        search_context = "--- APPLICABLE LAWS AND CITATIONS ---\n"
+        for doc in docs_results:
+            search_context += f"- Law: {doc['law_name']} | Section: {doc['section']} | Source: {doc['source']}\n  Summary: {doc['summary']}\n\n"
+        
+        search_context += "--- COURT JURISDICTION & GUIDANCE ---\n"
+        search_context += f"Steps: {procedures_results['procedural_steps']}\n"
+        search_context += f"Guidance: {procedures_results['guidance']}\n"
+        search_context += f"Timelines: {procedures_results['timelines']}\n"
+        
+        # Store in collected_context.tool_outputs
+        combined_context.setdefault("tool_outputs", {})
+        combined_context["tool_outputs"]["RightsAnalyzer"] = {
+            "laws_retrieved": docs_results,
+            "procedure_retrieved": procedures_results
+        }
+        
+        result_str = _call_gemini(combined_context, search_context)
         res = json.loads(result_str)
         res["language_detected"] = combined_context.get("language_detected", "English")
         res["emotional_tone"] = combined_context.get("emotional_tone", "calm")

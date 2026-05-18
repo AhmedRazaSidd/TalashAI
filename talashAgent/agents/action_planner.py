@@ -1,10 +1,11 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import run_agent_with_retry
-from google import genai
+from gemini_client import get_vertex_client, DEEP_MODEL
 import os
-from tools.search_legal_docs import search_legal_docs
+from tools.legal_tools import search_court_procedures, search_legal_aid
+
+client = get_vertex_client()
 
 logger = logging.getLogger(__name__)
 
@@ -31,18 +32,7 @@ class ActionPlannerOutput(BaseModel):
 system_prompt = """
 You are INSAAF OS ActionPlanner.
 
-You have access to legal context from the search_legal_docs tool to verify correct legal sequence before planning.
-
-Free legal aid resources in Pakistan:
-- DLEC: All major districts
-- Pakistan Bar Council Legal Aid
-- Sindh Bar Council: Karachi
-- Punjab Bar Council: Lahore
-- AGHS Legal Aid Cell: Lahore
-- Legal Aid Society: Karachi
-- Shirkat Gah: Women's rights
-- Rozan: Family/domestic violence
-- SPARC: Child rights
+You have access to legal context from search_court_procedures and search_legal_aid tools to plan a realistic case roadmap.
 
 Rules:
 - FREE options always first
@@ -56,12 +46,11 @@ Rules:
 """
 
 def _call_gemini(combined_context: dict, search_context: str):
-    client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
     lang = combined_context.get("language_detected", "English")
     tone = combined_context.get("emotional_tone", "calm")
     prompt = f"Target Language: {lang}\nEmotional Tone: {tone}\n\nSearch Context:\n{search_context}\n\nAgent Context:\n{json.dumps(combined_context)}"
     response = client.models.generate_content(
-        model='gemini-1.5-flash',
+        model=DEEP_MODEL,
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -71,11 +60,32 @@ def _call_gemini(combined_context: dict, search_context: str):
     )
     return response.text
 
-def run_action_planner(combined_context: dict) -> dict:
+def run_action_planner(combined_context: dict, on_trace=None) -> dict:
     try:
         query = combined_context.get("cleaned_input", "") or " ".join(combined_context.get("key_facts", []))
-        search_context = search_legal_docs(query)
-        result_str = run_agent_with_retry(_call_gemini, combined_context, search_context)
+        
+        # Dynamic tool execution & streaming traces
+        procedures_results = search_court_procedures(query, on_trace=on_trace)
+        aid_results = search_legal_aid(query, on_trace=on_trace)
+        
+        # Format the RAG context for the model
+        search_context = "--- COURT PROCEDURES & STEPS ---\n"
+        search_context += "Steps:\n" + "\n".join(procedures_results["procedural_steps"]) + "\n\n"
+        search_context += f"Guidance: {procedures_results['guidance']}\n"
+        search_context += f"Timelines: {procedures_results['timelines']}\n\n"
+        
+        search_context += "--- FREE LEGAL AID RESOURCES ---\n"
+        for clinic in aid_results:
+            search_context += f"- Clinic: {clinic['name']}\n  Location: {clinic['location']}\n  Service: {clinic['service']}\n  Contact: {clinic['contact']}\n\n"
+            
+        # Store in collected_context.tool_outputs
+        combined_context.setdefault("tool_outputs", {})
+        combined_context["tool_outputs"]["ActionPlanner"] = {
+            "procedures_retrieved": procedures_results,
+            "aid_retrieved": aid_results
+        }
+        
+        result_str = _call_gemini(combined_context, search_context)
         res = json.loads(result_str)
         res["language_detected"] = combined_context.get("language_detected", "English")
         res["emotional_tone"] = combined_context.get("emotional_tone", "calm")

@@ -22,84 +22,153 @@ export class AiService {
     category: string = 'General',
     attachments: string[] = [],
     userId?: string,
-  ): Promise<string> {
+    collectedContext: Record<string, any> = {},
+    targetAgent: string | null = null,
+  ): Promise<any> {
     try {
-      client.emit('agent_stream', { trace: '🚀 Initializing Talash AI Pipeline...' });
+      client.emit('agent_stream', { trace: `🚀 Executing agent ${targetAgent || 'Pipeline'}...` });
 
-      // 1. Call Python FastAPI
-      const response = await this.httpService.axiosRef.post(
-        'http://localhost:8000/analyze',
-        {
-          message: content,
-          history: history,
-        }
-      );
+      const apiUrl = this.configService.get<string>('PYTHON_AI_API_URL') || 'http://localhost:8000';
+      const apiKey = this.configService.get<string>('PYTHON_AI_API_KEY');
 
-      const result = response.data;
+      this.logger.log(`[FastAPI Hit] Sending request to Python Agent at: ${apiUrl}/analyze`);
 
-      // 2. As response comes back, emit socket events to frontend
-      
-      // Agent traces (simulated/extracted from response)
-      client.emit('agent_stream', {
-        trace: `✅ CaseClassifier — ${result.primary_category || category} ` + (result.readiness_score ? `${result.readiness_score}%` : '')
-      });
-      client.emit('agent_stream', { trace: '✅ ActionPlanner — Steps Generated' });
-      client.emit('agent_stream', { trace: '✅ MisguideDetector — Risk Analyzed' });
+      return await new Promise<any>((resolve, reject) => {
+        this.httpService.axiosRef.post(
+          `${apiUrl}/analyze`,
+          {
+            user_input: content,
+            input_type: 'text',
+            category_hint: category,
+            collected_context: collectedContext,
+            target_agent: targetAgent,
+          },
+          {
+            headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+            responseType: 'stream',
+          }
+        ).then((response) => {
+          this.logger.log('[AI Response] Successfully connected to Python Agent stream');
+          const stream = response.data;
+          let currentEvent = '';
+          let finalDataStr = '';
+          let buffer = '';
 
-      // Final cards in this exact order:
+          stream.on('data', (chunk: Buffer) => {
+            buffer += chunk.toString();
+            let newlineIdx;
+            while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
+              const line = buffer.substring(0, newlineIdx).trim();
+              buffer = buffer.substring(newlineIdx + 1);
+              
+              if (line.startsWith('event: ')) {
+                currentEvent = line.substring(7).trim();
+              } else if (line.startsWith('data: ')) {
+                const dataStr = line.substring(6).trim();
+                // Because JSON.stringify has no newlines, dataStr won't be truncated. 
+                // However, if SSE breaks a large JSON across multiple 'data: ' lines, we append it.
+                if (currentEvent === 'status') {
+                  this.logger.log(`[Agent Stream] Status: ${dataStr}`);
+                  client.emit('agent_stream', { trace: dataStr });
+                } else if (currentEvent === 'final') {
+                  finalDataStr += dataStr;
+                }
+              }
+            }
+          });
 
-      // Card 1: Case Dashboard
-      client.emit('agent_stream', {
-        chunk: `\n\`\`\`json\n${JSON.stringify({
-          type: "dashboard",
-          score: result.readiness_score,
-          case_type: result.primary_category,
-          missing_docs: result.missing_docs_count,
-          risk: result.fraud_risk,
-          free_aid: result.free_aid_eligible
-        })}\n\`\`\`\n`
-      });
+          stream.on('end', () => {
+            this.logger.log(`[Agent Stream] Stream ended. Final payload length: ${finalDataStr.length}`);
+            
+            if (finalDataStr) {
+              let finalData: any = {};
+              try {
+                finalData = JSON.parse(finalDataStr);
+                this.logger.log(`[Agent Stream] Successfully parsed final payload.`);
+              } catch (e) {
+                this.logger.error('Failed to parse final data JSON', e);
+              }
 
-      // Card 2: Action Plan
-      client.emit('agent_stream', {
-        chunk: `\n\`\`\`json\n${JSON.stringify({
-          type: "action_plan",
-          steps: result.action_plan
-        })}\n\`\`\`\n`
-      });
+              // Only emit final cards when PdfFormatter completes
+              if (finalData.agent === 'PdfFormatter' && finalData.pipeline_status === 'agent_complete') {
+                const ctx = finalData.final_output || {};
 
-      // Card 3: MisguideDetector
-      if (result.red_flags && result.red_flags.length > 0) {
-        client.emit('agent_stream', {
-          chunk: `\n\`\`\`json\n${JSON.stringify({
-            type: "misguide_alert",
-            flags: result.red_flags
-          })}\n\`\`\`\n`
+                const readiness_score = ctx.document_check?.readiness_score ?? 0;
+                const primary_category = ctx.primary_category ?? category;
+                const missing_docs_count = ctx.document_check?.documents_missing?.length ?? 0;
+                const fraud_risk = ctx.scam_protection?.fraud_risk ?? 'none';
+                const free_aid_eligible = ctx.action_plan?.free_legal_aid_available ?? false;
+                const action_plan_steps = ctx.action_plan?.action_plan ?? [];
+                const rights_summary = ctx.rights_analysis?.rights ?? [];
+                const red_flags = ctx.scam_protection?.red_flags ?? [];
+                const pdf_files = finalData.pdf_files ?? [];
+
+                // Card 1: Case Dashboard
+                client.emit('agent_stream', {
+                  chunk: `\n\`\`\`json\n${JSON.stringify({
+                    type: "dashboard",
+                    score: readiness_score,
+                    case_type: primary_category,
+                    missing_docs: missing_docs_count,
+                    risk: fraud_risk,
+                    free_aid: free_aid_eligible,
+                    rights_summary: rights_summary
+                  })}\n\`\`\`\n`
+                });
+
+                // Card 2: Action Plan
+                client.emit('agent_stream', {
+                  chunk: `\n\`\`\`json\n${JSON.stringify({
+                    type: "action_plan",
+                    steps: action_plan_steps.map((s: any) => typeof s === 'string' ? s : `${s.title}: ${s.action}`)
+                  })}\n\`\`\`\n`
+                });
+
+                // Card 3: MisguideDetector
+                if (red_flags.length > 0) {
+                  client.emit('agent_stream', {
+                    chunk: `\n\`\`\`json\n${JSON.stringify({
+                      type: "misguide_alert",
+                      flags: red_flags.map((f: any) => typeof f === 'string' ? f : f.flag)
+                    })}\n\`\`\`\n`
+                  });
+                }
+
+                // Card 4: PDF Links
+                if (pdf_files.length > 0) {
+                  const file = pdf_files[0];
+                  client.emit('agent_stream', {
+                    chunk: `\n\`\`\`json\n${JSON.stringify({
+                      type: "pdf_link",
+                      url: file.url || file,
+                      filename: file.filename || 'Action_Plan.pdf'
+                    })}\n\`\`\`\n`
+                  });
+                }
+              }
+
+              resolve(finalData);
+            } else {
+              resolve({ pipeline_status: 'failed', error: 'No final data received' });
+            }
+          });
+
+          stream.on('error', (err: any) => {
+            this.logger.error('Stream error:', err);
+            client.emit('message_error', { error: 'Pipeline stream interrupted', sessionId });
+            resolve({ pipeline_status: 'failed', error: 'Stream error' });
+          });
+        }).catch(err => {
+          this.logger.error('Python AI API call failed:', err);
+          client.emit('message_error', { error: 'Failed to process pipeline', sessionId });
+          resolve({ pipeline_status: 'failed', error: 'HTTP call failed' });
         });
-      }
-
-      // Card 4: PDF Links
-      if (result.pdf_files && result.pdf_files.length > 0) {
-        // We'll iterate through files if there are multiple, or just pass the array if the frontend supports it.
-        // Based on ChatScreen modifications, data.url and data.filename are expected, so we'll emit one for each or the first.
-        const file = result.pdf_files[0];
-        client.emit('agent_stream', {
-          chunk: `\n\`\`\`json\n${JSON.stringify({
-            type: "pdf_link",
-            url: file.url || file,
-            filename: file.filename || 'Action_Plan.pdf'
-          })}\n\`\`\`\n`
-        });
-      }
-
-      // 3. Return full response text for saving
-      // Save a summarized string into the database instead of raw JSON
-      return `Case Dashboard: ${result.readiness_score}% Readiness. ${result.primary_category}. \nAction Plan generated with ${result.action_plan?.length || 0} steps.`;
+      });
 
     } catch (err) {
-      this.logger.error('Python AI API call failed:', err);
-      client.emit('message_error', { error: 'Failed to process pipeline', sessionId });
-      return 'Sorry, the AI pipeline encountered an error.';
+      this.logger.error('Outer wrapper error:', err);
+      client.emit('message_error', { error: 'Failed to initialize pipeline', sessionId });
+      return { pipeline_status: 'failed', error: 'Initialization error' };
     }
   }
 

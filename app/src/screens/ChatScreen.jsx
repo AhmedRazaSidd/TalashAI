@@ -113,7 +113,94 @@ const renderArtifact = (content) => {
   return <View>{elements}</View>;
 };
 
-// ---------------------------------
+// --- Compact Workflow Timeline & Question Card Components ---
+
+const WorkflowTimeline = ({ progress }) => {
+  if (!progress) return null;
+
+  const { current_agent, completed_agents, remaining_agents, progress_percentage } = progress;
+
+  const ALL_AGENTS = [
+    'CaseListener', 'CaseClassifier', 'QuestioningAgent',
+    'RightsAnalyzer', 'DocumentChecker', 'ActionPlanner',
+    'MisguideDetector', 'PdfFormatter'
+  ];
+
+  return (
+    <View style={styles.workflowContainer}>
+      <View style={styles.workflowProgressRow}>
+        <Text style={styles.workflowProgressText}>
+          Analyzing Case: <Text style={{ color: colors.accent, fontWeight: 'bold' }}>{current_agent}</Text>
+        </Text>
+        <Text style={styles.workflowPercentage}>{progress_percentage}%</Text>
+      </View>
+
+      <View style={styles.progressBarBg}>
+        <View style={[styles.progressBarFill, { width: `${progress_percentage}%` }]} />
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timelineScroll} contentContainerStyle={styles.timelineContent}>
+        {ALL_AGENTS.map((agent) => {
+          const isCompleted = completed_agents?.includes(agent);
+          const isWaiting = current_agent === agent;
+          
+          let icon = 'ellipse-outline';
+          let color = '#444';
+          let textColor = '#888';
+          let badgeBg = 'rgba(255,255,255,0.05)';
+
+          if (isCompleted) {
+            icon = 'checkmark-circle';
+            color = '#4CD964';
+            textColor = '#4CD964';
+            badgeBg = 'rgba(76, 217, 100, 0.1)';
+          } else if (isWaiting) {
+            icon = 'time';
+            color = '#FFCC00';
+            textColor = '#FFCC00';
+            badgeBg = 'rgba(255, 204, 0, 0.15)';
+          }
+
+          return (
+            <View key={agent} style={[styles.timelineBadge, { backgroundColor: badgeBg }]}>
+              <Ionicons name={icon} size={12} color={color} style={{ marginRight: 4 }} />
+              <Text style={[styles.timelineBadgeText, { color: textColor }]}>{agent}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
+
+const AgentQuestionCard = ({ questionData }) => {
+  if (!questionData) return null;
+
+  const { question, expected_input, agent } = questionData;
+
+  return (
+    <View style={styles.questionCardContainer}>
+      <View style={styles.questionCardHeader}>
+        <View style={styles.questionAgentBadge}>
+          <Ionicons name="sparkles" size={12} color="#000" style={{ marginRight: 4 }} />
+          <Text style={styles.questionAgentText}>{agent}</Text>
+        </View>
+        <Text style={styles.expectedInputText}>
+          Expected Input: <Text style={{ fontWeight: 'bold', color: colors.accent }}>{expected_input}</Text>
+        </Text>
+      </View>
+
+      <Text style={styles.questionText}>{question}</Text>
+
+      <View style={styles.questionCardFooter}>
+        <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 8 }} />
+        <Text style={styles.waitingText}>Waiting for your reply...</Text>
+      </View>
+    </View>
+  );
+};
+
+// -------------------------------------------------------------
 
 const ChatScreen = () => {
   const { t } = useTranslation();
@@ -145,14 +232,68 @@ const ChatScreen = () => {
   const [agentTrace, setAgentTrace] = useState('');
 
   const flatListRef = useRef(null);
+  const chatInputRef = useRef(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+
+  // New interactive workflow states
+  const [currentWorkflowProgress, setCurrentWorkflowProgress] = useState(null);
+  const [currentAgentQuestion, setCurrentAgentQuestion] = useState(null);
 
   useEffect(() => {
     const fetchSession = async () => {
       try {
         const res = await axiosClient.get(`/chat/sessions/${sessionId}`);
-        setSession(res.data.data);
+        const sessionData = res.data.data;
+        setSession(sessionData);
+
+        if (sessionData) {
+          const AGENT_SEQUENCE = [
+            'CaseListener', 'CaseClassifier', 'QuestioningAgent',
+            'RightsAnalyzer', 'DocumentChecker', 'ActionPlanner',
+            'MisguideDetector', 'PdfFormatter'
+          ];
+          const currentStep = sessionData.current_step || 0;
+          const currentAgent = sessionData.current_agent;
+          const waitingForUser = sessionData.waiting_for_user;
+          const collectedContext = sessionData.collected_context || {};
+          const answers = collectedContext.answers || {};
+
+          if (currentAgent) {
+            const completedAgents = AGENT_SEQUENCE.slice(0, currentStep - 1);
+            const remainingAgents = AGENT_SEQUENCE.slice(currentStep);
+            const progressPercentage = Math.round(((currentStep - 1) / AGENT_SEQUENCE.length) * 100);
+
+            setCurrentWorkflowProgress({
+              current_agent: currentAgent,
+              current_step: currentStep,
+              completed_agents: completedAgents,
+              remaining_agents: remainingAgents,
+              progress_percentage: progressPercentage,
+            });
+
+            if (waitingForUser) {
+              const lastExpectedInput = answers.last_expected_input || 'generic_reply';
+              let questionText = "Aapke paas registry (Title deed) hai?";
+              if (lastExpectedInput === 'has_fard') {
+                questionText = "Fard ya inteqal available hai?";
+              } else if (lastExpectedInput === 'user_problem_detail') {
+                questionText = "Aap apne maslay ke baare mein thora tafseel se bata sakte hain taake hum behtar madad kar sakein?";
+              }
+              
+              setCurrentAgentQuestion({
+                question: questionText,
+                expected_input: lastExpectedInput,
+                agent: currentAgent,
+              });
+            } else {
+              setCurrentAgentQuestion(null);
+            }
+          } else {
+            setCurrentWorkflowProgress(null);
+            setCurrentAgentQuestion(null);
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch session', err);
       }
@@ -160,10 +301,85 @@ const ChatScreen = () => {
     if (sessionId) fetchSession();
   }, [sessionId]);
 
-  // Initialize socket and fetch history
+  // 1. Initialize socket and register listeners ONCE
+  useEffect(() => {
+    socketClient.connect();
+
+    const onSessionCreated = (data) => {
+      console.log('[Socket] session_created:', data);
+      setSessionId(data.sessionId);
+    };
+
+    const onMessageStream = (data) => {
+      setIsTyping(true);
+      if (data.trace) {
+        setAgentTrace(data.trace);
+      }
+      if (data.chunk) {
+        setActiveStreamMessage(prev => prev + data.chunk);
+      }
+    };
+
+    const onMessageDone = (data) => {
+      console.log('[Socket] message_done:', data);
+      setIsTyping(false);
+      setActiveStreamMessage('');
+      setAgentTrace('');
+      setCurrentAgentQuestion(null);
+      setCurrentWorkflowProgress(null);
+
+      dispatch(addMessageToSession({
+        _id: data.messageId,
+        role: 'assistant',
+        content: data.fullMessage,
+        audioUrl: data.audioUrl,
+        type: data.audioUrl ? 'audio' : 'text',
+        createdAt: new Date().toISOString()
+      }));
+    };
+
+    const onMessageError = (data) => {
+      console.log('[Socket] message_error:', data);
+      setIsTyping(false);
+      setActiveStreamMessage('');
+      setAgentTrace('');
+      Alert.alert('Message Failed', data.error || 'Something went wrong. Please try again.');
+    };
+
+    const onAgentQuestion = (data) => {
+      console.log('[Socket] agent_question:', data);
+      setCurrentAgentQuestion(data);
+      setIsTyping(false);
+      setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
+    };
+
+    const onWorkflowProgress = (data) => {
+      console.log('[Socket] workflow_progress:', data);
+      setCurrentWorkflowProgress(data);
+    };
+
+    socketClient.on('session_created', onSessionCreated);
+    socketClient.on('agent_stream', onMessageStream);
+    socketClient.on('message_done', onMessageDone);
+    socketClient.on('message_error', onMessageError);
+    socketClient.on('agent_question', onAgentQuestion);
+    socketClient.on('workflow_progress', onWorkflowProgress);
+
+    return () => {
+      socketClient.off('session_created', onSessionCreated);
+      socketClient.off('agent_stream', onMessageStream);
+      socketClient.off('message_done', onMessageDone);
+      socketClient.off('message_error', onMessageError);
+      socketClient.off('agent_question', onAgentQuestion);
+      socketClient.off('workflow_progress', onWorkflowProgress);
+    };
+  }, [dispatch]);
+
+  // 2. Fetch history and handle session state
   useEffect(() => {
     dispatch(clearCurrentSession());
-    socketClient.connect();
 
     if (sessionId) {
       dispatch(fetchSessionMessages({ sessionId }));
@@ -179,56 +395,6 @@ const ChatScreen = () => {
       // Clear initialMessage from params so it doesn't re-trigger
       navigation.setParams({ initialMessage: null });
     }
-
-    const onSessionCreated = (data) => {
-      setSessionId(data.sessionId);
-    };
-
-    const onMessageStream = (data) => {
-      setIsTyping(true);
-      if (data.trace) {
-        setAgentTrace(prev => prev + data.trace + '\n');
-      }
-      if (data.chunk) {
-        setActiveStreamMessage(prev => prev + data.chunk);
-      }
-    };
-
-    const onMessageDone = (data) => {
-      setIsTyping(false);
-      setActiveStreamMessage('');
-      setAgentTrace('');
-      // The backend returns { fullMessage, sessionId, messageId, audioUrl }
-      dispatch(addMessageToSession({
-        _id: data.messageId,
-        role: 'assistant',
-        content: data.fullMessage,
-        audioUrl: data.audioUrl,
-        type: data.audioUrl ? 'audio' : 'text',
-        createdAt: new Date().toISOString()
-      }));
-    };
-
-    const onMessageError = (data) => {
-      setIsTyping(false);
-      setActiveStreamMessage('');
-      setAgentTrace('');
-      console.error('[Chat] Error:', data.error);
-      Alert.alert('Message Failed', data.error || 'Something went wrong. Please try again.');
-    };
-
-    socketClient.on('session_created', onSessionCreated);
-    socketClient.on('agent_stream', onMessageStream);
-    socketClient.on('message_done', onMessageDone);
-    socketClient.on('message_error', onMessageError);
-
-    return () => {
-      socketClient.off('session_created', onSessionCreated);
-      socketClient.off('agent_stream', onMessageStream);
-      socketClient.off('message_done', onMessageDone);
-      socketClient.off('message_error', onMessageError);
-      // Don't disconnect socket entirely, just cleanup listeners
-    };
   }, [sessionId, dispatch]);
 
   const openDrawer = () => {
@@ -258,6 +424,9 @@ const ChatScreen = () => {
 
     const tempId = Date.now().toString();
     const content = inputText.trim();
+
+    // Clear active question overlay since we responded
+    setCurrentAgentQuestion(null);
 
     // Add optimistic user message to Redux
     dispatch(addMessageToSession({
@@ -309,6 +478,9 @@ const ChatScreen = () => {
         const base64Audio = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType.Base64,
         });
+
+        // Clear active question overlay since we responded
+        setCurrentAgentQuestion(null);
 
         // Add optimistic user message to Redux
         const tempId = Date.now().toString();
@@ -526,8 +698,19 @@ const ChatScreen = () => {
     );
   };
 
-  // Messages from Redux are stored oldest-first (pushed in order).
-  // We use inverted FlatList so newest appears at the bottom — no manual reversal needed.
+  // Deduplicate messages to ensure every message renders exactly once
+  const uniqueMessages = React.useMemo(() => {
+    const seen = new Set();
+    // Keep the latest version by iterating from the end if needed,
+    // but Array.filter keeps the first occurrence which is fine for our oldest-first array
+    return currentSessionMessages.filter(msg => {
+      const id = msg._id || msg.tempId;
+      if (!id) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [currentSessionMessages]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -611,6 +794,9 @@ const ChatScreen = () => {
           </View>
         </View>
 
+        {/* WORKFLOW TIMELINE PROGRESS */}
+        <WorkflowTimeline progress={currentWorkflowProgress} />
+
         {/* AI SUMMARY MODAL */}
         {showSummary && (
           <View style={styles.summaryOverlay}>
@@ -637,7 +823,7 @@ const ChatScreen = () => {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={[...currentSessionMessages].reverse()}
+            data={[...uniqueMessages].reverse()}
             keyExtractor={(item, index) => item._id?.toString() || index.toString()}
             renderItem={renderMessage}
             style={styles.messageList}
@@ -668,11 +854,18 @@ const ChatScreen = () => {
               </View>
             ) : (
               <View style={styles.typingIndicatorContainer}>
-                <Text style={styles.typingText}>Talash AI is thinking...</Text>
+                <Text style={styles.typingText}>
+                  {currentWorkflowProgress?.current_agent
+                    ? `📋 ${currentWorkflowProgress.current_agent} is analyzing your case...`
+                    : 'Talash AI is thinking...'}
+                </Text>
               </View>
             )}
           </View>
         )}
+
+        {/* AGENT QUESTION CARD */}
+        <AgentQuestionCard questionData={currentAgentQuestion} />
 
         {/* BOTTOM INPUT BAR */}
         <View style={styles.bottomInputBar}>
@@ -681,6 +874,7 @@ const ChatScreen = () => {
           </TouchableOpacity>
 
           <TextInput
+            ref={chatInputRef}
             style={[
               styles.chatInput,
               isFocused && styles.chatInputFocused,
@@ -882,6 +1076,109 @@ const styles = StyleSheet.create({
   streamingContainer: { paddingHorizontal: 16, paddingBottom: 8 },
   traceBox: { backgroundColor: '#000000', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#333', flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   traceText: { color: '#00ff00', fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', flex: 1 },
+  workflowContainer: {
+    backgroundColor: '#161616',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  workflowProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  workflowProgressText: {
+    color: '#E0E0E0',
+    fontSize: 12,
+  },
+  workflowPercentage: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: '#333333',
+    borderRadius: 2,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: colors.accent,
+  },
+  timelineScroll: {
+    flexGrow: 0,
+  },
+  timelineContent: {
+    gap: 8,
+    paddingRight: 16,
+  },
+  timelineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  timelineBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  questionCardContainer: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  questionCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  questionAgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  questionAgentText: {
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  expectedInputText: {
+    color: '#888888',
+    fontSize: 10,
+  },
+  questionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  questionCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  waitingText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
 });
 
 export default ChatScreen;

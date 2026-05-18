@@ -7,6 +7,20 @@ import { Category, CategoryDocument } from './schema/category.schema';
 import { PaginationDto, CursorPaginationDto } from './dto/pagination.dto';
 import { AdminFilterDto } from './dto/admin-filter.dto';
 
+// Ordered list of all pipeline agents. Used by the workflow orchestrator.
+export const AGENT_SEQUENCE = [
+  'CaseListener',
+  'CaseClassifier',
+  'QuestioningAgent',
+  'RightsAnalyzer',
+  'DocumentChecker',
+  'ActionPlanner',
+  'MisguideDetector',
+  'PdfFormatter',
+] as const;
+
+export type AgentName = typeof AGENT_SEQUENCE[number];
+
 import { AiService } from './ai.service';
 import { UserService } from '../user/user.service';
 
@@ -313,6 +327,124 @@ export class ChatService {
   }
   async getAllCategories() {
     return this.categoryModel.find({ isActive: true }).sort({ name: 1 }).exec();
+  }
+
+  // ──────────────────────────────────────────────────────
+  // Workflow State Helpers
+  // ──────────────────────────────────────────────────────
+
+  /**
+   * Returns the current workflow state for a session.
+   * If the session has never run a pipeline, current_agent will be null
+   * and waiting_for_user will be false.
+   */
+  async getWorkflowState(sessionId: string) {
+    const session = await this.sessionModel
+      .findById(sessionId)
+      .select('current_agent current_step waiting_for_user collected_context')
+      .exec();
+    if (!session) throw new NotFoundException('Session not found');
+    return {
+      current_agent: session.current_agent ?? null,
+      current_step: session.current_step ?? 0,
+      waiting_for_user: session.waiting_for_user ?? false,
+      collected_context: session.collected_context ?? {},
+    };
+  }
+
+  /**
+   * Returns the name of the agent currently running (or null if none).
+   */
+  async getCurrentAgent(sessionId: string): Promise<AgentName | null> {
+    const state = await this.getWorkflowState(sessionId);
+    return (state.current_agent as AgentName) ?? null;
+  }
+
+  /**
+   * Advances the workflow to the next agent in AGENT_SEQUENCE.
+   * If we are already on the last agent, sets current_agent to null
+   * (pipeline complete). Resets waiting_for_user to false.
+   */
+  async moveToNextAgent(sessionId: string): Promise<AgentName | null> {
+    const state = await this.getWorkflowState(sessionId);
+    const currentIdx = AGENT_SEQUENCE.indexOf(state.current_agent as AgentName);
+    const nextIdx = currentIdx + 1;
+    const nextAgent = nextIdx < AGENT_SEQUENCE.length ? AGENT_SEQUENCE[nextIdx] : null;
+
+    await this.sessionModel.findByIdAndUpdate(sessionId, {
+      current_agent: nextAgent,
+      current_step: nextAgent ? nextIdx + 1 : AGENT_SEQUENCE.length,
+      waiting_for_user: false,
+    });
+
+    return nextAgent;
+  }
+
+  /**
+   * Merges a key/value answer into the session's collected_context.answers.
+   * Pass the agent name as `agentKey` to namespace answers cleanly.
+   */
+  async saveAgentAnswer(
+    sessionId: string,
+    agentKey: string,
+    answer: any,
+  ): Promise<void> {
+    await this.sessionModel.findByIdAndUpdate(sessionId, {
+      $set: { [`collected_context.answers.${agentKey}`]: answer },
+    });
+  }
+
+  /**
+   * Updates specific keys inside collected_context.
+   */
+  async updateWorkflowContext(
+    sessionId: string,
+    updates: Record<string, any>,
+  ): Promise<void> {
+    const updateObj: Record<string, any> = {};
+    for (const [key, val] of Object.entries(updates)) {
+      updateObj[`collected_context.${key}`] = val;
+    }
+    await this.sessionModel.findByIdAndUpdate(sessionId, { $set: updateObj });
+  }
+
+  /**
+   * Initialises the workflow for a fresh pipeline run.
+   * Sets current_agent to the first agent, resets step counter to 1
+   * and clears any stale collected_context.
+   */
+  async initWorkflow(sessionId: string): Promise<void> {
+    await this.sessionModel.findByIdAndUpdate(sessionId, {
+      current_agent: AGENT_SEQUENCE[0],
+      current_step: 1,
+      waiting_for_user: false,
+      collected_context: {
+        user_problem: null,
+        category: null,
+        answers: {},
+        documents: [],
+        risk_flags: [],
+        generated_outputs: null,
+      },
+    });
+  }
+
+  /**
+   * Marks the session as waiting for user input in the middle of a pipeline.
+   * The gateway will check this flag before deciding whether to resume or restart.
+   */
+  async setWaitingForUser(sessionId: string, waiting: boolean): Promise<void> {
+    await this.sessionModel.findByIdAndUpdate(sessionId, { waiting_for_user: waiting });
+  }
+
+  /**
+   * Marks the pipeline as fully complete: clears agent pointer and waiting flag.
+   */
+  async completeWorkflow(sessionId: string): Promise<void> {
+    await this.sessionModel.findByIdAndUpdate(sessionId, {
+      current_agent: null,
+      waiting_for_user: false,
+    });
   }
 }
 

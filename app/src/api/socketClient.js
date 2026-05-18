@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const SOCKET_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+const SOCKET_URL = 'http://192.168.100.66:3000';
 
 class SocketClient {
   constructor() {
@@ -13,7 +13,7 @@ class SocketClient {
   }
 
   async connect() {
-    if (this.socket?.connected) return;
+    if (this.socket) return;
     if (this._connecting) return;
 
     this._connecting = true;

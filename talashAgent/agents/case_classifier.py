@@ -1,9 +1,11 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import run_agent_with_retry
+from gemini_client import get_vertex_client, FAST_MODEL
 from google import genai
 import os
+
+client = get_vertex_client()
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +52,10 @@ If the language_detected is provided, ensure any explanatory text (like time_sen
 """
 
 def _call_gemini(agent1_output: dict):
-    client = genai.Client(vertexai=True, project="talash-496612", location="us-central1")
     lang = agent1_output.get("language_detected", "English")
     prompt = f"Target Language: {lang}\nAgent 1 Output:\n{json.dumps(agent1_output)}"
     response = client.models.generate_content(
-        model='gemini-1.5-flash',
+        model=FAST_MODEL,
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -64,9 +65,9 @@ def _call_gemini(agent1_output: dict):
     )
     return response.text
 
-def run_case_classifier(agent1_output: dict) -> dict:
+def run_case_classifier(agent1_output: dict, on_trace=None) -> dict:
     try:
-        result_str = run_agent_with_retry(_call_gemini, agent1_output)
+        result_str = _call_gemini(agent1_output)
         res = json.loads(result_str)
         res["language_detected"] = agent1_output.get("language_detected", "English")
         res["emotional_tone"] = agent1_output.get("emotional_tone", "calm")

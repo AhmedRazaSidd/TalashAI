@@ -10,6 +10,9 @@ import asyncio
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from gemini_client import get_vertex_client, FAST_MODEL
+
+DEFAULT_MODEL = FAST_MODEL
 
 # Import SQLite Memory Store
 from memory_store import (
@@ -33,18 +36,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Resilient Google Vertex AI Client & Model Fallbacks
+# Initialize Resilient Gemini API Client & Model Fallbacks
 def get_fallback_list(requested_model: str) -> list:
-    if requested_model == "gemini-1.5-flash":
-        return ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash"]
-    elif requested_model == "gemini-1.5-flash":
-        return ["gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash"]
-    elif requested_model == "gemini-1.5-flash-lite":
-        return ["gemini-1.5-flash-lite", "gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash"]
-    elif requested_model == "gemini-1.5-flash":
-        return ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash"]
+    if requested_model == DEFAULT_MODEL:
+        return [DEFAULT_MODEL, DEFAULT_MODEL]
     else:
-        return ["gemini-1.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash"]
+        return [DEFAULT_MODEL, DEFAULT_MODEL]
 
 class QuotaResilientModels:
     def __init__(self, client):
@@ -140,18 +137,13 @@ class QuotaResilientModels:
                 raise e
         raise RuntimeError("Vertex AI System exhausted all fallback models during stream initialization.")
 
-class VertexClientWrapper:
+class GeminiClientWrapper:
     def __init__(self):
-        # Migrate fully to Vertex AI on Google Cloud
-        self.raw_client = genai.Client(
-            vertexai=True,
-            project="talash-496612",
-            location="us-central1"
-        )
+        self.raw_client = get_vertex_client()
         self.models = QuotaResilientModels(self.raw_client)
-        print("[Vertex AI Client] Successfully initialized using Google Vertex AI API key.")
+        print("[Gemini API Client] Successfully initialized.")
 
-client = VertexClientWrapper()
+client = GeminiClientWrapper()
 
 # Helper background task for memory extraction
 def extract_and_save_memories_task(user_id: str, prompt: str, response_text: str, history: list):
@@ -177,7 +169,7 @@ def extract_and_save_memories_task(user_id: str, prompt: str, response_text: str
         
         # Call Gemini 2.5 Flash to parse the facts
         res = client.raw_client.models.generate_content(
-            model='gemini-1.5-flash',
+            model=DEFAULT_MODEL,
             contents=history_context,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -203,6 +195,8 @@ class AnalyzeRequest(BaseModel):
     user_input: str
     input_type: str = "text"
     category_hint: str | None = None
+    collected_context: dict = {}  # Prior answers from MongoDB workflow state
+    target_agent: str | None = None
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -300,7 +294,7 @@ async def chat(req: ChatRequest):
                 )
 
                 response_stream = client.models.generate_content_stream(
-                    model='gemini-1.5-flash',
+                    model=DEFAULT_MODEL,
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
@@ -344,7 +338,7 @@ async def chat(req: ChatRequest):
                 system_instruction += "\n\n" + "=== COGNITIVE SYSTEM MEMORY ===" + memory_context + "==============================="
 
             response = client.models.generate_content(
-                model='gemini-1.5-flash',
+                model=DEFAULT_MODEL,
                 contents=req.prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -376,7 +370,7 @@ async def voice(req: VoiceRequest):
 
             if audio_part:
                 transcribe_res = client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model=DEFAULT_MODEL,
                     contents=[audio_part, "Transcribe this audio exactly into Urdu/English text. Return ONLY the transcript."],
                 )
                 transcript = transcribe_res.text or "[Audio transcript empty]"
@@ -422,7 +416,7 @@ async def voice(req: VoiceRequest):
             )
 
             response_stream = client.models.generate_content_stream(
-                model='gemini-1.5-flash',
+                model=DEFAULT_MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -456,7 +450,7 @@ async def classify(req: ClassifyRequest):
             "Return ONLY the category name."
         )
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model=DEFAULT_MODEL,
             contents=req.text,
             config=types.GenerateContentConfig(system_instruction=system_instruction)
         )
@@ -485,7 +479,7 @@ async def analyze_document(req: DocRequest):
         )
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model=DEFAULT_MODEL,
             contents=[doc_part, "Analyze this document."],
             config=types.GenerateContentConfig(system_instruction=system_instruction)
         )
@@ -500,7 +494,7 @@ async def analyze_document(req: DocRequest):
                     "and parties involved that can be remembered by a legal assistant chatbot."
                 )
                 summary_response = client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model=DEFAULT_MODEL,
                     contents=analysis_text,
                     config=types.GenerateContentConfig(system_instruction=summary_instruction)
                 )
@@ -538,7 +532,7 @@ async def summarize(req: SummarizeRequest):
         )
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model=DEFAULT_MODEL,
             contents=chat_history,
             config=types.GenerateContentConfig(system_instruction=system_instruction)
         )
@@ -583,8 +577,21 @@ async def analyze(req: AnalyzeRequest):
     async def event_generator():
         async def dummy_answer_callback(questions):
             return []
-            
-        async for event in run_pipeline_stream(req.user_input, req.input_type, dummy_answer_callback, req.category_hint):
+
+        # Log whether this is a fresh run or a resume
+        if req.collected_context:
+            print(f"[Pipeline] Resuming with collected_context keys: {list(req.collected_context.keys())}")
+        else:
+            print("[Pipeline] Starting fresh pipeline run.")
+
+        async for event in run_pipeline_stream(
+            req.user_input,
+            req.input_type,
+            dummy_answer_callback,
+            req.category_hint,
+            req.collected_context,  # pass prior answers to seed pipeline context
+            req.target_agent,       # agent to run
+        ):
             if event["type"] == "status":
                 yield {"event": "status", "data": event["message"]}
             elif event["type"] == "final":

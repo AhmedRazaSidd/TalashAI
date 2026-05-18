@@ -4,11 +4,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-key = "AQ.Ab8RN6IS6tohC7tm1ihf9dh7Jk5fTmhgRxCy8drRrfYnSvAn9w"
-print("Initializing client...")
+from google.oauth2 import service_account
+
+credentials = service_account.Credentials.from_service_account_file(
+    "./service-account.json",
+    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+)
+
+print("Initializing client with Service Account...")
 client = genai.Client(
     vertexai=True,
-    api_key=key
+    project="talash-496613",
+    location="us-central1",
+    credentials=credentials
 )
 print("Client initialized successfully!")
 
@@ -27,6 +35,5 @@ for model in embedding_models:
             contents="Pakistan penal code"
         )
         print(f"-> SUCCESS for {model}! Response embedding length: {len(response.embeddings[0].values)}")
-        break
     except Exception as e:
         print(f"-> FAILED for {model}: {e}")

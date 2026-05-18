@@ -65,7 +65,12 @@ const renderArtifact = (content) => {
         elements.push(
           <ArtifactCard key={`art-${match.index}`} title="Case Readiness Dashboard" icon="speedometer" color="#4CD964">
             <Text style={styles.artifactText}>Readiness Score: <Text style={{fontWeight: 'bold', fontSize: 18}}>{data.score}%</Text></Text>
-            <Text style={styles.artifactText}>Status: {data.status}</Text>
+            <View style={{ height: 8, backgroundColor: '#333', borderRadius: 4, marginVertical: 8, overflow: 'hidden' }}>
+              <View style={{ height: '100%', width: `${data.score}%`, backgroundColor: '#4CD964' }} />
+            </View>
+            <Text style={styles.artifactText}>Case Type: <Text style={{fontWeight: 'bold'}}>{data.case_type}</Text></Text>
+            <Text style={styles.artifactText}>Missing Documents: <Text style={{fontWeight: 'bold', color: '#FF3B30'}}>{data.missing_docs}</Text></Text>
+            <Text style={styles.artifactText}>Fraud/Scam Risk: <Text style={{fontWeight: 'bold', color: data.risk === 'none' ? '#4CD964' : '#FF9500'}}>{data.risk}</Text></Text>
           </ArtifactCard>
         );
       } else if (data.type === 'action_plan') {
@@ -84,6 +89,29 @@ const renderArtifact = (content) => {
             {data.flags?.map((flag, idx) => (
               <Text key={idx} style={[styles.artifactText, { color: '#ffcccc' }]}>• {flag}</Text>
             ))}
+          </ArtifactCard>
+        );
+      } else if (data.type === 'pdf_links') {
+        elements.push(
+          <ArtifactCard key={`art-${match.index}`} title={i18n.t('generatedDocuments') || "Generated Documents"} icon="document-text" color="#5AC8FA">
+            <View style={{ flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              {data.files?.map((file, idx) => {
+                const prefix = file.name === 'Case Summary' ? '📄 ' :
+                               file.name === 'Legal Draft' ? '⚖️ ' :
+                               file.name === 'Legal Aid Letter' ? '🆓 ' : '📄 ';
+                return (
+                  <TouchableOpacity key={idx} style={styles.pdfButton} onPress={() => Linking.openURL(file.url)}>
+                    <Text style={{ fontWeight: 'bold', color: '#000', fontSize: 14 }}>
+                      {prefix}
+                      {file.name === 'Case Summary' ? (i18n.t('caseSummary') || 'Case Summary') :
+                       file.name === 'Legal Draft' ? (i18n.t('legalDraft') || 'Legal Draft') :
+                       file.name === 'Legal Aid Letter' ? (i18n.t('legalAidLetter') || 'Legal Aid Letter') :
+                       file.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </ArtifactCard>
         );
       } else if (data.type === 'pdf_link') {
@@ -274,11 +302,16 @@ const ChatScreen = () => {
 
             if (waitingForUser) {
               const lastExpectedInput = answers.last_expected_input || 'generic_reply';
-              let questionText = "Aapke paas registry (Title deed) hai?";
-              if (lastExpectedInput === 'has_fard') {
-                questionText = "Fard ya inteqal available hai?";
-              } else if (lastExpectedInput === 'user_problem_detail') {
-                questionText = "Aap apne maslay ke baare mein thora tafseel se bata sakte hain taake hum behtar madad kar sakein?";
+              let questionText = answers.QuestioningAgent?.last_question || '';
+              
+              if (!questionText) {
+                if (lastExpectedInput === 'has_fard') {
+                  questionText = "Fard ya inteqal available hai?";
+                } else if (lastExpectedInput === 'user_problem_detail') {
+                  questionText = "Aap apne maslay ke baare mein thora tafseel se bata sakte hain taake hum behtar madad kar sakein?";
+                } else {
+                  questionText = "Aapka kia jawab hai?";
+                }
               }
               
               setCurrentAgentQuestion({
@@ -660,25 +693,6 @@ const ChatScreen = () => {
             item.tempId && styles.pendingBubble,
           ]}>
             {renderBubbleContent()}
-            {(item.type === 'voice' || item.type === 'audio' || item.audioUrl) ? (
-              <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />
-            ) : item.type === 'attachment' || item.fileUrl ? (
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => { })}
-              >
-                <Ionicons name="document-text" size={20} color={isUser ? "#000000" : colors.accent} style={{ marginRight: 8 }} />
-                <Text style={[
-                  styles.bubbleText,
-                  isUser ? styles.userText : styles.aiText,
-                  { textDecorationLine: 'underline' }
-                ]}>
-                  {item.content || 'Document'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              isUser ? renderTextContent(item.content || item.text) : renderArtifact(item.content || item.text)
-            )}
 
             {/* Bottom row: bookmark star + timestamp */}
             <View style={styles.messageMeta}>
@@ -686,10 +700,14 @@ const ChatScreen = () => {
               <Text style={[styles.timeText, isUser ? styles.timeTextUser : styles.timeTextAI]}>
                 {timestamp}
               </Text>
-              {isUser && (
-                <Text style={styles.statusText}>
-                  {item.tempId ? '🕐' : item.status === 'read' ? '✔✔' : '✔'}
-                </Text>
+               {isUser && (
+                item.tempId ? (
+                  <Ionicons name="time-outline" size={13} color="rgba(0,0,0,0.5)" />
+                ) : item.status === 'read' ? (
+                  <Ionicons name="checkmark-done" size={14} color="#2196F3" />
+                ) : (
+                  <Ionicons name="checkmark" size={14} color="rgba(0,0,0,0.6)" />
+                )
               )}
             </View>
           </View>

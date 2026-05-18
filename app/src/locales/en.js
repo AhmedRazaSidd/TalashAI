@@ -71,4 +71,8 @@ export default {
   helpSupport: '❓  Help & Support',
   aboutTalash: 'ℹ️  About Talash',
   logout: '🚪 Logout',
+  generatedDocuments: 'Generated Case Documents',
+  caseSummary: 'Download Case Summary',
+  legalDraft: 'Download Legal Draft',
+  legalAidLetter: 'Download Legal Aid Request Letter',
 }

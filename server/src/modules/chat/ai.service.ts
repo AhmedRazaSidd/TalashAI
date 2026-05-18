@@ -103,6 +103,31 @@ export class AiService {
                 const red_flags = ctx.scam_protection?.red_flags ?? [];
                 const pdf_files = finalData.pdf_files ?? [];
 
+                // Stream textual summary first (Rights, Documents, Action Plan)
+                let summaryChunk = `### ⚖️ INSAAF OS Legal Assessment Report\n\n`;
+                if (rights_summary.length > 0) {
+                  summaryChunk += `#### 📋 Applicable Legal Rights:\n`;
+                  rights_summary.forEach((r: any, idx: number) => {
+                    const title = typeof r === 'string' ? r : (r.title || r.law_name);
+                    const desc = typeof r === 'string' ? '' : ` - ${r.description || r.summary}`;
+                    summaryChunk += `${idx + 1}. **${title}**${desc}\n`;
+                  });
+                  summaryChunk += `\n`;
+                }
+
+                summaryChunk += `#### 🔍 Documents Status:\n`;
+                const provided = ctx.document_check?.documents_provided || [];
+                if (provided.length > 0) {
+                  summaryChunk += `* **Provided Documents**: ${provided.join(', ')}\n`;
+                }
+                if (missing_docs_count > 0) {
+                  const missing_docs = ctx.document_check?.documents_missing || [];
+                  summaryChunk += `* **Missing / Recommended Documents**: ${missing_docs.join(', ')}\n`;
+                }
+                summaryChunk += `\n`;
+
+                client.emit('agent_stream', { chunk: summaryChunk });
+
                 // Card 1: Case Dashboard
                 client.emit('agent_stream', {
                   chunk: `\n\`\`\`json\n${JSON.stringify({
@@ -136,12 +161,30 @@ export class AiService {
 
                 // Card 4: PDF Links
                 if (pdf_files.length > 0) {
-                  const file = pdf_files[0];
+                  const pdf_links = pdf_files.map((file: any) => {
+                    const filePath = typeof file === 'string' ? file : (file.url || '');
+                    const filename = filePath.split(/[/\\]/).pop() || 'Document.pdf';
+                    
+                    let name = 'Document';
+                    if (filename.includes('CaseSummary')) {
+                      name = 'Case Summary';
+                    } else if (filename.includes('LegalDraft')) {
+                      name = 'Legal Draft';
+                    } else if (filename.includes('LegalAidLetter')) {
+                      name = 'Legal Aid Letter';
+                    }
+                    
+                    return {
+                      name: name,
+                      url: `${apiUrl}/download-pdf/${filename}`,
+                      filename: filename
+                    };
+                  });
+
                   client.emit('agent_stream', {
                     chunk: `\n\`\`\`json\n${JSON.stringify({
-                      type: "pdf_link",
-                      url: file.url || file,
-                      filename: file.filename || 'Action_Plan.pdf'
+                      type: "pdf_links",
+                      files: pdf_links
                     })}\n\`\`\`\n`
                   });
                 }

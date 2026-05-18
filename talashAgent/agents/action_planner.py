@@ -3,6 +3,7 @@ import logging
 from pydantic import BaseModel, Field
 from gemini_client import get_vertex_client, DEEP_MODEL
 import os
+from google import genai
 from tools.legal_tools import search_court_procedures, search_legal_aid
 
 client = get_vertex_client()

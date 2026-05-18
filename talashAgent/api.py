@@ -598,3 +598,40 @@ async def analyze(req: AnalyzeRequest):
                 yield {"event": "final", "data": json.dumps(event["data"])}
 
     return EventSourceResponse(event_generator())
+
+from fastapi.responses import FileResponse
+
+class AnswerQuestionsRequest(BaseModel):
+    session_id: str
+    answer: str
+    collected_context: dict
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "TalashAI Agent Server"}
+
+@app.get("/download-pdf/{filename}")
+def download_pdf(filename: str):
+    file_path = os.path.join("outputs", filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type="application/pdf", filename=filename)
+    return {"error": "File not found"}
+
+@app.post("/answer-questions")
+async def answer_questions(req: AnswerQuestionsRequest):
+    try:
+        from agents.questioning_agent import run_questioning_agent
+        # Save the incoming answer under the last expected key
+        qa_state = req.collected_context.setdefault("answers", {}).setdefault("QuestioningAgent", {})
+        if not isinstance(qa_state, dict):
+            qa_state = {}
+            req.collected_context["answers"]["QuestioningAgent"] = qa_state
+            
+        last_expected_input = qa_state.get("last_expected_input", "q1")
+        qa_state[last_expected_input] = req.answer
+        
+        result = run_questioning_agent(req.collected_context)
+        return result
+    except Exception as e:
+        return {"status": "failed", "error": str(e)}
+

@@ -71,4 +71,8 @@ export default {
   helpSupport: '❓  مدد اور سپورٹ',
   aboutTalash: 'ℹ️  تلاش کے بارے میں',
   logout: '🚪 لاگ آؤٹ',
+  generatedDocuments: 'تیار کردہ عدالتی دستاویزات',
+  caseSummary: 'کیس کا خلاصہ ڈاؤن لوڈ کریں',
+  legalDraft: 'قانونی ڈرافٹ ڈاؤن لوڈ کریں',
+  legalAidLetter: 'قانونی امداد کا خط ڈاؤن لوڈ کریں',
 }

@@ -234,6 +234,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         // Store the expected field name so the gateway knows where to save the next response
         await this.chatService.saveAgentAnswer(sessionId, 'last_expected_input', response.expected_input);
 
+        // Persist the question as an assistant message in the database
+        const savedQuestionMsg = await this.chatService.saveAssistantMessage(
+          sessionId,
+          userId,
+          response.question,
+          'text',
+          'text',
+        );
+
         // Emit 'agent_question' socket event
         client.emit('agent_question', {
           question: response.question,
@@ -243,6 +252,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
         // Push a readable question text into chat trace
         client.emit('agent_stream', { chunk: `\n\n**${currentAgent}**: ${response.question}\n` });
+
+        // Let the client know the question message is done and saved
+        client.emit('message_done', {
+          fullMessage: response.question,
+          sessionId: sessionId,
+          messageId: savedQuestionMsg._id.toString()
+        });
 
         return; // HALT remaining loop execution, wait for next user reply!
       }
@@ -279,12 +295,106 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`[Workflow Complete] All agents completed successfully for session: ${sessionId}`);
 
     const finalState = await this.chatService.getWorkflowState(sessionId);
-    const pdfFormatterOutput = finalState.collected_context.answers?.PdfFormatter || {};
+    const answers = finalState.collected_context.answers || {};
+    const classifier = answers.CaseClassifier || {};
+    const rightsAnalyzer = answers.RightsAnalyzer || {};
+    const docChecker = answers.DocumentChecker || {};
+    const actionPlanner = answers.ActionPlanner || {};
+    const misguideDetector = answers.MisguideDetector || {};
+    const pdfFormatter = answers.PdfFormatter || {};
+
+    const readiness_score = docChecker.readiness_score ?? 0;
+    const primary_category = classifier.primary_category ?? 'General Case';
+    const missing_docs = docChecker.documents_missing || [];
+    const fraud_risk = misguideDetector.fraud_risk ?? 'none';
+    const free_aid = actionPlanner.free_legal_aid_available ?? false;
+    const action_plan_steps = actionPlanner.action_plan || [];
+    const rights_summary = rightsAnalyzer.rights || [];
+    const red_flags = misguideDetector.red_flags || [];
+    const pdf_files = pdfFormatter.pdf_files || [];
 
     // Save final generated outputs under generated_outputs
-    await this.chatService.updateWorkflowContext(sessionId, { generated_outputs: pdfFormatterOutput });
+    await this.chatService.updateWorkflowContext(sessionId, { generated_outputs: pdfFormatter });
 
-    const fullResponse = "Case assessment has been successfully generated. Please check your dashboard below.";
+    let fullResponse = `### ⚖️ INSAAF OS Legal Assessment Report\n\n`;
+    
+    // 1. Add Rights Analysis
+    if (rights_summary.length > 0) {
+      fullResponse += `#### 📋 Applicable Legal Rights:\n`;
+      rights_summary.forEach((r: any, idx: number) => {
+        const title = typeof r === 'string' ? r : (r.title || r.law_name);
+        const desc = typeof r === 'string' ? '' : ` - ${r.description || r.summary}`;
+        fullResponse += `${idx + 1}. **${title}**${desc}\n`;
+      });
+      fullResponse += `\n`;
+    }
+    
+    // 2. Add Documents Checklist
+    fullResponse += `#### 🔍 Documents Status:\n`;
+    const provided = docChecker.documents_provided || [];
+    if (provided.length > 0) {
+      fullResponse += `* **Provided Documents**: ${provided.join(', ')}\n`;
+    }
+    if (missing_docs.length > 0) {
+      fullResponse += `* **Missing / Recommended Documents**: ${missing_docs.join(', ')}\n`;
+    }
+    fullResponse += `\n`;
+
+    // 3. Case Dashboard Card JSON
+    fullResponse += `\`\`\`json\n${JSON.stringify({
+      type: "dashboard",
+      score: readiness_score,
+      case_type: primary_category,
+      missing_docs: missing_docs.length,
+      risk: fraud_risk,
+      free_aid: free_aid,
+      rights_summary: rights_summary
+    }, null, 2)}\n\`\`\`\n\n`;
+
+    // 4. Action Plan Card JSON
+    if (action_plan_steps.length > 0) {
+      fullResponse += `\`\`\`json\n${JSON.stringify({
+        type: "action_plan",
+        steps: action_plan_steps.map((s: any) => typeof s === 'string' ? s : `${s.title}: ${s.action}`)
+      }, null, 2)}\n\`\`\`\n\n`;
+    }
+
+    // 5. Misguide / Scam alert Card JSON
+    if (red_flags.length > 0) {
+      fullResponse += `\`\`\`json\n${JSON.stringify({
+        type: "misguide_alert",
+        flags: red_flags.map((f: any) => typeof f === 'string' ? f : f.flag)
+      }, null, 2)}\n\`\`\`\n\n`;
+    }
+
+    // 6. PDF Links Card JSON
+    if (pdf_files.length > 0) {
+      const apiUrl = this.configService.get<string>('PYTHON_AI_API_URL') || 'http://localhost:8000';
+      const pdf_links = pdf_files.map((file: any) => {
+        const filePath = typeof file === 'string' ? file : (file.url || '');
+        const filename = filePath.split(/[/\\]/).pop() || 'Document.pdf';
+        
+        let name = 'Document';
+        if (filename.includes('CaseSummary')) {
+          name = 'Case Summary';
+        } else if (filename.includes('LegalDraft')) {
+          name = 'Legal Draft';
+        } else if (filename.includes('LegalAidLetter')) {
+          name = 'Legal Aid Letter';
+        }
+        
+        return {
+          name: name,
+          url: `${apiUrl}/download-pdf/${filename}`,
+          filename: filename
+        };
+      });
+
+      fullResponse += `\`\`\`json\n${JSON.stringify({
+        type: "pdf_links",
+        files: pdf_links
+      }, null, 2)}\n\`\`\`\n`;
+    }
 
     const savedMsg = await this.chatService.saveAssistantMessage(
       sessionId,
@@ -298,7 +408,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.emit('message_done', {
       fullMessage: fullResponse,
       sessionId: sessionId,
-      messageId: savedMsg._id
+      messageId: savedMsg._id.toString()
     });
 
     // Send Push Notification

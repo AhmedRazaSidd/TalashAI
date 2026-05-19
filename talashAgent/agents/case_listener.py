@@ -1,9 +1,11 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import run_agent_with_retry
+from gemini_client import get_vertex_client, FAST_MODEL
 from google import genai
 import os
+
+client = get_vertex_client()
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +44,9 @@ Emotional tone rules:
 """
 
 def _call_gemini(text: str, input_type: str):
-    client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))
     prompt = f"Input type: {input_type}\nRaw Input: {text}"
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model=FAST_MODEL,
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -55,9 +56,16 @@ def _call_gemini(text: str, input_type: str):
     )
     return response.text
 
-def run_case_listener(text: str, input_type: str) -> dict:
+def run_case_listener(text: str, input_type: str, on_trace=None) -> dict:
     try:
-        result_str = run_agent_with_retry(_call_gemini, text, input_type)
+        if len(text.strip()) < 15:
+            return {
+                "pause_for_user": True,
+                "question": "Aap apne maslay ke baare mein thora tafseel se bata sakte hain taake hum behtar madad kar sakein?",
+                "expected_input": "user_problem_detail",
+                "agent": "CaseListener"
+            }
+        result_str = _call_gemini(text, input_type)
         return json.loads(result_str)
     except Exception as e:
         logger.error(f"Agent 1 failed: {e}")

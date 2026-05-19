@@ -1,0 +1,376 @@
+[
+  {
+    "type": "status",
+    "message": "🎯 Agent 1: Understanding your problem / Aapka masla samajh rahe hain..."
+  },
+  {
+    "type": "language",
+    "language": "Roman Urdu"
+  },
+  {
+    "type": "status",
+    "message": "✅ Agent 2: Case classify ho gaya hai..."
+  },
+  {
+    "type": "status",
+    "message": "❓ Agent 3: Check kar rahe hain agar mazeed sawaalat ki zaroorat hai..."
+  },
+  {
+    "type": "status",
+    "message": "🔍 Agent 4: Mutalqa qawaneen dhoond rahe hain... [Tool Call: search_legal_docs]"
+  },
+  {
+    "type": "status",
+    "message": "📋 Agent 5: Documents check kar rahe hain..."
+  },
+  {
+    "type": "status",
+    "message": "🗺️ Agent 6: Action plan bana rahe hain... [Tool Call: search_legal_docs]"
+  },
+  {
+    "type": "status",
+    "message": "🛡️ Agent 7: Dhoka dahi se bachao ka check kar rahe hain..."
+  },
+  {
+    "type": "status",
+    "message": "📄 Agent 8: PDFs bana rahe hain...\n               [Bana rahe hain: Case Summary]\n               [Bana rahe hain: Legal Draft]\n               [Bana rahe hain: Legal Aid Letter]"
+  },
+  {
+    "type": "status",
+    "message": "✅ Mukammal! Jawab dekhayein."
+  },
+  {
+    "type": "final",
+    "data": {
+      "pipeline_status": "complete",
+      "agents_succeeded": [
+        "Agent 1",
+        "Agent 2",
+        "Agent 3",
+        "Agent 4",
+        "Agent 5",
+        "Agent 6",
+        "Agent 7",
+        "Agent 8"
+      ],
+      "agents_failed": [],
+      "emotional_tone": "distressed",
+      "final_output": {
+        "status": "success",
+        "language_detected": "Roman Urdu",
+        "cleaned_input": "Meri zameen pe qabza ho gaya hai",
+        "key_facts": [
+          "Land encroachment has occurred"
+        ],
+        "people_involved": [
+          "User",
+          "Unknown encroacher(s)"
+        ],
+        "assets_involved": [
+          "Land"
+        ],
+        "emotional_tone": "distressed",
+        "urgency_signals": [],
+        "unclear_fields": [
+          "Identity of encroacher(s)",
+          "Location of land",
+          "Details of encroachment"
+        ],
+        "primary_category": "property_dispute",
+        "secondary_category": null,
+        "confidence": 95,
+        "needs_clarification": false,
+        "urgency_level": "high",
+        "time_sensitive": true,
+        "time_sensitivity_reason": "Zameen par qabze ke mamlaat mein mazeed nuqsaan ya ghaasibana qabze ke da'won ko mazboot hone se rokne ke liye fauri karwai ki zaroorat hoti hai.",
+        "court_jurisdiction": "Civil Court",
+        "questions_from_agent3": [
+          {
+            "id": 1,
+            "question": "Kya aapke paas apni zameen ki registry ya koi aur pakke kaaghazat (documents) hain, jo yeh sabit kar saken ke yeh zameen aapki hai?",
+            "why_important": "Inse aapki zameen ki milkiyat (ownership) sabit hoti hai."
+          },
+          {
+            "id": 2,
+            "question": "Yeh qabza kitne arse pehle hua, maslan kuch din, mahine ya saal?",
+            "why_important": "Yeh jan'na zaroori hai ke qabza kitne waqt se hai, taa ke case ki muddat (time limit) ka pata chal sake."
+          },
+          {
+            "id": 3,
+            "question": "Kya aapko maloom hai ke aapki zameen par qabza kisne kiya hai?",
+            "why_important": "Agar qabza karne wale ka pata ho to uske khilaaf karwai karna aasan ho jata hai."
+          },
+          {
+            "id": 4,
+            "question": "Kya aapne is qabze ke baare mein police ko bataya hai ya koi shikayat darj karwai hai?",
+            "why_important": "Police ko ittela (inform) karna zaroori hota hai, taa ke woh is mamle mein shamil ho saken aur aapki madad kar saken."
+          }
+        ],
+        "user_answers": [],
+        "rights_analysis": {
+          "status": "success",
+          "rights": [
+            {
+              "right": "Ghair Qanooni Qabzay Ke Khilaf FIR Darj Karane Ka Haq",
+              "explanation": "Hamein aapki pareshani ka shadeed ehsaas hai. Aapko haq hai ke aap foran apne nazdeeki police station ja kar qabza karne walon ke khilaf criminal trespass (ghair qanooni mudakhlat) ki FIR darj karwayein. Yeh ek fori qadam hai jo qanooni karwai ka aaghaz karta hai.",
+              "law_reference": "Pakistan Penal Code, 1860, Section 447; Code of Criminal Procedure, 1898, Section 154",
+              "strength": "strong",
+              "risk": "Police is mamle ko diwani (civil) qarar de kar fori karwai se inkaar kar sakti hai."
+            },
+            {
+              "right": "Apni Zameen Wapis Lene Ke Liye Diwani Dawa (Civil Suit) Karne Ka Haq",
+              "explanation": "Aap civil court mein apni zameen ki malkiyat sabit karne aur qabza wapis lene ke liye 'Suit for Declaration and Possession' file kar sakte hain. Iske liye aapko malkiyat ke saboot, jaise registry ya fard, pesh karne honge.",
+              "law_reference": "Civil Procedure Code, 1908",
+              "strength": "strong",
+              "risk": "Civil case bohot lamba chal sakta hai aur is par kafi kharcha aa sakta hai."
+            },
+            {
+              "right": "Qabzay Wali Zameen Par Mazeed Tameerat Rokne Ke Liye Hukm-e-Imtinai (Stay Order) Lene Ka Haq",
+              "explanation": "Apne civil case ke sath, aap adalat se fori tor par ek hukm-e-imtinai (stay order ya injunction) ki darkhwast kar sakte hain taake qabza karne wala us zameen par koi nayi tameer na kar sake jab tak case ka faisla nahi ho jata.",
+              "law_reference": "Civil Procedure Code, 1908, Order XXXIX",
+              "strength": "moderate",
+              "risk": "Adalat ka is darkhwast ko manzoor karna ya na karna uski apni samajh par munhasir hai, aur iski pairvi mein waqt lag sakta hai."
+            },
+            {
+              "right": "Malkiyati Dastawezat Ko بطور Saboot Pesh Karne Ka Haq",
+              "explanation": "Aapka sab se ahem haq aapki zameen ke malkiyati kaghazat (jaise ke registry, intiqal, ya fard) ko adalat mein بطور saboot pesh karna hai. Yeh aapke case ki buniyad hain aur iske baghair case sabit karna mushkil hai.",
+              "law_reference": "Qanoon-e-Shahadat Order, 1984",
+              "strength": "strong",
+              "risk": "Agar aapke kaghazat mein koi kami ya ghalti ho, ya woh mukammal na hon, to case kamzor ho sakta hai."
+            }
+          ],
+          "key_risks": [
+            "Adalati karwai bohot lambi aur mehngi ho sakti hai.",
+            "Saboot ki kami ya kamzor kaghazat aapke case ko kamzor kar sakte hain.",
+            "Police shayad fori karwai na kare aur isay civil mamla qarar de de.",
+            "Mumkin hai ke qabza karne wala jhoote kaghazat pesh kare ya adalat ke hukum ko nazarandaz kare."
+          ],
+          "disclaimer": "Yeh maloomat sirf aam rehnumai ke liye hain aur yeh qanooni mashwara nahi hai. Har case ke halaat mukhtalif hotay hain. Apne mamle ki tafseelat ke liye, behtar hai ke aap kisi mustanad wakeel se zaroor rabta karein.",
+          "language_detected": "Roman Urdu",
+          "emotional_tone": "distressed"
+        },
+        "document_check": {
+          "status": "success",
+          "readiness_score": 0,
+          "readiness_label": "Not Ready",
+          "documents_found": [],
+          "documents_missing": [
+            {
+              "name": "Shanakhti Card (CNIC)",
+              "urgency": "critical",
+              "where_to_get": "NADRA office se. Agar gum ho gaya hai to dobara apply karain.",
+              "time_required": "Kuch dinon se le kar chand hafton tak.",
+              "cost": "NADRA ki fees ke mutabiq."
+            },
+            {
+              "name": "Malikyat ki Dastawez (Title Deed / Registry)",
+              "urgency": "critical",
+              "where_to_get": "Apne zila (district) ke registrar office ya land records office se. Aap ko apni registry ki copy wahan se mil sakti hai.",
+              "time_required": "Chand din se chand haftay.",
+              "cost": "Official fees ke mutabiq."
+            },
+            {
+              "name": "Zameen ka Record (Fard / Intiqal)",
+              "urgency": "critical",
+              "where_to_get": "Patwari ya apne ilaqay ke Arazi Record Center (ARC) se.",
+              "time_required": "Chand ghanton se le kar kuch din tak.",
+              "cost": "Mamooli sarkari fees."
+            },
+            {
+              "name": "Gawahon ke Bayanat",
+              "urgency": "high",
+              "where_to_get": "Parosi, ya koi bhi shakhs jis ne qabza hote dekha ho. Wakeel ki madad se un ke bayanat stamp paper par likhwain.",
+              "time_required": "Kuch din.",
+              "cost": "Stamp paper aur wakeel ki fees."
+            },
+            {
+              "name": "Tasaveer ya Video Saboot",
+              "urgency": "high",
+              "where_to_get": "Khud apne phone se qabze wali jagah ki tasaveer aur video banain. Koshish karain ke tareekh aur waqt bhi record ho.",
+              "time_required": "Fori.",
+              "cost": "Free."
+            },
+            {
+              "name": "Pichle Adalati Hukumnamay (Agar Koi Hon)",
+              "urgency": "medium",
+              "where_to_get": "Agar is zameen par pehle koi case hua hai to uss adalat ke record room se.",
+              "time_required": "Chand din.",
+              "cost": "Official fees."
+            },
+            {
+              "name": "Property Tax ki Raseedein",
+              "urgency": "medium",
+              "where_to_get": "Apne shehar ke Excise and Taxation office se.",
+              "time_required": "Kuch din.",
+              "cost": "Official fees agar baqayajat hon."
+            }
+          ],
+          "score_breakdown": {
+            "documents": 0,
+            "witnesses": 0,
+            "urgency_penalty": -20,
+            "total": 0
+          },
+          "fraud_risk": "low",
+          "fraud_risk_reason": "User ne koi dastawezat faraham nahi kiye hain aur mamle ki tafseelat wazeh nahi hain. Case ki buniyad ko tasdeeq karne ke liye dastawezat zaroori hain.",
+          "language_detected": "Roman Urdu",
+          "emotional_tone": "distressed"
+        },
+        "action_plan": {
+          "status": "success",
+          "emotional_note": "Hamein aapki pareshani ka ehsaas hai. Fikar na karen, qanoon aapke sath hai aur aapki zameen wapis mil sakti hai. Yeh qadamat aapko is safar mein rehnumai faraham karenge.",
+          "action_plan": [
+            {
+              "step": 1,
+              "title": "Fori Saboot Jama Karen",
+              "action": "Agar mehfooz ho to foran apni zameen par ja kar qabze ki tasaveer aur videos banayein. Har cheez ko record karein, jese ke koi tameerati samaan ya qabza karne walay log. Is se aapka case mazboot hoga.",
+              "location": "Aapki zameen ki jagah",
+              "documents_needed": [
+                "Phone ya camera"
+              ],
+              "estimated_time": "Fori (jitna jaldi ho sake)",
+              "cost": "Free",
+              "escalation": "Agar wahan jana khatarnak mehsoos ho, to akele na jayein. Police ko ittila dene ke baad unke sath jayein.",
+              "is_immediate": true
+            },
+            {
+              "step": 2,
+              "title": "Apni Malkiyat Ke Dastawezat Jama Karen",
+              "action": "Apni zameen ki malkiyat sabit karne ke liye zaroori kaghazat ikathay karen. Is mein Registry, Fard Malkiyat, aur Intiqal shamil hain. Yeh aapke case ki buniyad hain.",
+              "location": "Apne ilaqay ka Arazi Record Center (ARC) ya Patwari se Fard ke liye aur Sub-Registrar office se Registry ki copy ke liye.",
+              "documents_needed": [
+                "Aapka Shanakhti Card (CNIC)"
+              ],
+              "estimated_time": "Kuch din se chand haftay",
+              "cost": "Mamooli sarkari fees",
+              "escalation": "Agar kaghazat haasil karne mein dushwari ho ya record mein koi masla ho, to foran wakeel se mashwara karein.",
+              "is_immediate": false
+            },
+            {
+              "step": 3,
+              "title": "Muft Qanooni Mashwara Hasil Karen",
+              "action": "Apne kaghazat aur saboot le kar muft qanooni imdad faraham karne walay idaaray se rabta karein. Woh aapko case file karne ka sahi tareeka batayeinge.",
+              "location": "Aapke zila mein District Legal Empowerment Committee (DLEC) ka daftar. Agar yeh aapke shehar mein nahi hai to Pakistan Bar Council se rabta karein.",
+              "documents_needed": [
+                "Shanakhti Card (CNIC)",
+                "Malkiyat ke saboot (Fard/Registry)",
+                "Qabze ki tasaveer/videos"
+              ],
+              "estimated_time": "1-3 din",
+              "cost": "Free",
+              "escalation": "Agar muft imdad ke liye intezar karna paray, to waqt zaya kiye baghair kisi private wakeel se ibtidai mashwara lein.",
+              "is_immediate": false
+            },
+            {
+              "step": 4,
+              "title": "Police Mein Darkhwast/FIR Darj Karwayen",
+              "action": "Wakeel ke mashwaray se apne nazdeeki police station ja kar ghair qanooni qabze (Criminal Trespass) ke khilaf darkhwast dein ya FIR (First Information Report) darj karwanay ki koshish karein.",
+              "location": "Aapke ilaqay ka Police Station",
+              "documents_needed": [
+                "Wakeel ki likhi hui darkhwast",
+                "Shanakhti Card ki copy",
+                "Malkiyat ke kaghazat ki copy"
+              ],
+              "estimated_time": "1-2 din",
+              "cost": "Free",
+              "escalation": "Agar police FIR darj karne se inkaar kare aur mamle ko civil qarar de, to aapka wakeel Section 22-A/22-B ke tehat adalat ke zariye FIR darj karwane ki darkhwast de sakta hai.",
+              "is_immediate": false
+            },
+            {
+              "step": 5,
+              "title": "Civil Adalat Mein Dawa Dayar Karen",
+              "action": "Apne wakeel ke zariye Civil Court mein 'Suit for Declaration and Possession' (Dawa Dastiyabi Qabza) file karein. Sath hi, fori tor par 'Stay Order' (Hukm-e-Imtinai) ki darkhwast dein taake qabza group mazeed tameerat na kar sake.",
+              "location": "Aapke zila ki Civil Court",
+              "documents_needed": [
+                "Tamaam asal dastawezat (Registry, Fard, etc.)",
+                "Shanakhti Card (CNIC)",
+                "Tasaveer aur deegar saboot",
+                "Vakalatnama (wakeel ko case denay ka form)"
+              ],
+              "estimated_time": "Case file karne mein chand haftay. Faislay mein waqt lag sakta hai.",
+              "cost": "Agar muft qanooni imdad na ho to adalti fees aur wakeel ki fees hazaron mein ho sakti hai.",
+              "escalation": "Agar mukhalif party Stay Order ki khilaf warzi kare to foran adalat ko 'Contempt of Court' ki darkhwast ke zariye ittila dein.",
+              "is_immediate": false
+            },
+            {
+              "step": 6,
+              "title": "Case Ki Musalsal Pairvi Karen",
+              "action": "Adalat ki har tareekh par apne wakeel ke sath pesh hon. Case ke baray mein unse musalsal rabtay mein rahen aur adalat ke har hukum par amal karein.",
+              "location": "Civil Court",
+              "documents_needed": [
+                "Case se mutaliq tamam kaghazat ki file"
+              ],
+              "estimated_time": "Kai mahine se le kar chand saal tak",
+              "cost": "Wakeel ki har peshi ki fees aur deegar akhrajat.",
+              "escalation": "Agar aap apne wakeel ki karkardagi se mutmain nahi hain, to aapko wakeel tabdeel karne ka haq hai.",
+              "is_immediate": false
+            }
+          ],
+          "total_estimated_time": "Kai mahinon se le kar chand saal tak lag saktay hain.",
+          "total_estimated_cost": "Muft qanooni imdad se le kar wakeel ki fees ke sath hazaron ya lakhon tak ja sakta hai.",
+          "free_legal_aid_available": true,
+          "nearest_free_aid": "Aapke zila mein District Legal Empowerment Committee (DLEC) ka daftar.",
+          "language_detected": "Roman Urdu",
+          "emotional_tone": "distressed"
+        },
+        "scam_protection": {
+          "status": "success",
+          "red_flags": [
+            {
+              "flag": "Jald Faislay ka Ghair-Haqaani Waada",
+              "example": "Lawyer kahega, \"Aapka case 1 mahine mein pakka khatam ho jayega, ya hum judge ko jaante hain, kaam ho jayega.\"",
+              "what_to_do": "Kisi bhi wakeel par bharosa na karein jo waqt se pehle faisle ki 'guarantee' de. Qanooni amliyat mein waqt lagta hai aur koi bhi faisla adalat ka ikhtiyar hota hai."
+            },
+            {
+              "flag": "Fees mein Na-Wazahat ya 'Pehle Paisa Do Phir Result Guarantee'",
+              "example": "Wakeel kahe, \"Pehle itne paisay jama karwao phir result ki guarantee hai,\" ya fees ka koi wazeh breakdown na de.",
+              "what_to_do": "Hamesha apni fees ka mukammal aur tehreeri breakdown talab karein. Kisi bhi wakeel ko advance mein sirf 'result ki guarantee' par paisa na dein. Fees ka talluq services se hota hai, faisle se nahi."
+            },
+            {
+              "flag": "Ghair Zaroori Adalati Akhrajat ka Mutalba",
+              "example": "Wakeel aapse court filing fees, stamp paper ya notarial charges ke liye bohot zyada raqam mange jo asal se kahin zyada ho.",
+              "what_to_do": "Tamam sarkari fees aur akhrajat ki asl raseedein (receipts) talab karein. Aap khud bhi mutaliqa adalat ya office se in fees ki tasdeeq kar sakte hain."
+            }
+          ],
+          "smart_questions": [
+            "Is mamle mein meri zameen ke kaghzat (documents) ki kya aehmiyat hai aur kon kon se documents zaroori hain jo mujhe jama karne chahiyein?",
+            "Civil court mein zameen ke qabze ka mamla hal hone mein aam taur par kitna waqt lagta hai aur iske mukhtalif marhalay kya hain?",
+            "Aapki fee ka structure kya hai aur is mein kya kya shamil hai (maslan court fees, travel expenses, drafting charges, etc.)? Kya aap mujhe iska tehreeri hisaab de sakte hain?",
+            "Agar police FIR darj karne se inkaar kare aur is mamle ko sirf diwani (civil) qarar de, to kya doosra tareeqa hai qanooni karwai shuru karne ka?",
+            "Kya is case mein koi 'stay order' ya 'hukm-e-imtinai' mil sakta hai taake qabza karne wale mazeed nuqsaan na pahuncha sakein, aur uske liye kya qadmaat uthane honge?"
+          ],
+          "your_rights": [
+            "Aapko haq hai ke aap foran apne nazdeeki police station ja kar qabza karne walon ke khilaf criminal trespass (ghair qanooni mudakhlat) ki FIR darj karwayein.",
+            "Aap civil court mein apni zameen ki malkiyat sabit karne aur qabza wapis lene ke liye 'Suit for Declaration and Possession' file kar sakte hain.",
+            "Apne civil case ke sath, aap adalat se fori tor par ek hukm-e-imtinai (stay order ya injunction) ki darkhwast kar sakte hain taake qabza karne wala us zameen par koi nayi tameer na kar sake.",
+            "Aapka sab se ahem haq aapki zameen ke malkiyati kaghazat (jaise ke registry, intiqal, ya fard) ko adalat mein بطور saboot pesh karna hai.",
+            "Aapko haq hai ke aap apne wakeel se tamam fees aur akhrajat ka wazeh breakdown talab karein."
+          ],
+          "case_specific_warnings": [
+            "Adalati karwai bohot lambi aur mehngi ho sakti hai, iske liye zehni aur maliyati tor par tayyar rahen.",
+            "Saboot ki kami ya kamzor kaghazat aapke case ko kamzor kar sakte hain, lehaza tamaam zaroori dastawezat yakja karein.",
+            "Mumkin hai ke police fori karwai na kare aur isay civil mamla qarar de, aisi surat mein adalat ke zariye karwai karna hogi.",
+            "Qabza karne wala jhoote kaghazat pesh kar sakta hai ya adalat ke hukum ko nazarandaz karne ki koshish kar sakta hai.",
+            "User ne koi dastawezat faraham nahi kiye hain aur mamle ki tafseelat wazeh nahi hain. Case ki buniyad ko tasdeeq karne ke liye dastawezat zaroori hain."
+          ],
+          "bar_council_complaint": "Agar aapko lage ke aapka wakeel ghalat mashwara de raha hai, ghair-ikhlaki harkat kar raha hai ya aapko dhoka de raha hai, to aap mutaliqa Bar Council (maslan Pakistan Bar Council ya Provincial Bar Council) mein uske khilaf tehreeri shikayat darj karwa sakte hain. Shikayat mein waqiyat, saboot aur wakeel ka naam wazahat se likhen. Aap unki website par ya daftar ja kar mazeed maloomat hasil kar sakte hain.",
+          "language_detected": "Roman Urdu",
+          "emotional_tone": "distressed"
+        },
+        "pdfs": {
+          "status": "success",
+          "pdf_files": [
+            "outputs\\INSAAF_CaseSummary_1779125518.pdf",
+            "outputs\\INSAAF_LegalDraft_1779125518.pdf",
+            "outputs\\INSAAF_LegalAidLetter_1779125518.pdf"
+          ]
+        }
+      },
+      "pdf_files": [
+        "outputs\\INSAAF_CaseSummary_1779125518.pdf",
+        "outputs\\INSAAF_LegalDraft_1779125518.pdf",
+        "outputs\\INSAAF_LegalAidLetter_1779125518.pdf"
+      ]
+    }
+  }
+]

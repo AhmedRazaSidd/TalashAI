@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  TextInput, 
-  SafeAreaView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  SafeAreaView,
   FlatList,
   Animated,
   Dimensions,
@@ -35,17 +35,184 @@ import SCREENS from '../constants/screenNames';
 const { width } = Dimensions.get('window');
 const DRAWER_WIDTH = 280;
 
+// --- Custom Artifact Components ---
+
+const ArtifactCard = ({ title, icon, color = colors.accent, children }) => (
+  <View style={[styles.artifactCard, { borderColor: color }]}>
+    <View style={styles.artifactHeader}>
+      <Ionicons name={icon} size={18} color={color} style={{ marginRight: 6 }} />
+      <Text style={[styles.artifactTitle, { color }]}>{title}</Text>
+    </View>
+    <View style={styles.artifactBody}>{children}</View>
+  </View>
+);
+
+const renderArtifact = (content) => {
+  // Regex to detect JSON code blocks labeled as special artifacts
+  const artifactRegex = /```json\s*([\s\S]*?)\s*```/g;
+  let lastIndex = 0;
+  let match;
+  const elements = [];
+
+  while ((match = artifactRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      elements.push(<Text key={`text-${lastIndex}`} style={styles.aiText}>{content.substring(lastIndex, match.index)}</Text>);
+    }
+    
+    try {
+      const data = JSON.parse(match[1]);
+      if (data.type === 'dashboard') {
+        elements.push(
+          <ArtifactCard key={`art-${match.index}`} title="Case Readiness Dashboard" icon="speedometer" color="#4CD964">
+            <Text style={styles.artifactText}>Readiness Score: <Text style={{fontWeight: 'bold', fontSize: 18}}>{data.score}%</Text></Text>
+            <Text style={styles.artifactText}>Status: {data.status}</Text>
+          </ArtifactCard>
+        );
+      } else if (data.type === 'action_plan') {
+        elements.push(
+          <ArtifactCard key={`art-${match.index}`} title="Recommended Action Plan" icon="list" color={colors.accent}>
+            {data.steps?.map((step, idx) => (
+              <Text key={idx} style={styles.artifactText}>
+                <Text style={{fontWeight: 'bold'}}>{idx + 1}.</Text> {step}
+              </Text>
+            ))}
+          </ArtifactCard>
+        );
+      } else if (data.type === 'misguide_alert') {
+        elements.push(
+          <ArtifactCard key={`art-${match.index}`} title="Misguide Alert" icon="warning" color={colors.error}>
+            {data.flags?.map((flag, idx) => (
+              <Text key={idx} style={[styles.artifactText, { color: '#ffcccc' }]}>• {flag}</Text>
+            ))}
+          </ArtifactCard>
+        );
+      } else if (data.type === 'pdf_link') {
+        elements.push(
+          <ArtifactCard key={`art-${match.index}`} title="Generated Document" icon="document-text" color="#5AC8FA">
+            <TouchableOpacity style={styles.pdfButton} onPress={() => Linking.openURL(data.url)}>
+              <Ionicons name="download" size={16} color="#000" style={{ marginRight: 6 }} />
+              <Text style={{ fontWeight: 'bold', color: '#000' }}>Download {data.filename}</Text>
+            </TouchableOpacity>
+          </ArtifactCard>
+        );
+      } else {
+        // Not a recognized artifact, just render as raw text
+        elements.push(<Text key={`raw-${match.index}`} style={styles.aiText}>{match[0]}</Text>);
+      }
+    } catch (e) {
+      // Failed to parse JSON, render as raw text
+      elements.push(<Text key={`raw-${match.index}`} style={styles.aiText}>{match[0]}</Text>);
+    }
+    lastIndex = artifactRegex.lastIndex;
+  }
+
+  if (lastIndex < content.length) {
+    elements.push(<Text key={`text-${lastIndex}`} style={styles.aiText}>{content.substring(lastIndex)}</Text>);
+  }
+
+  return <View>{elements}</View>;
+};
+
+// --- Compact Workflow Timeline & Question Card Components ---
+
+const WorkflowTimeline = ({ progress }) => {
+  if (!progress) return null;
+
+  const { current_agent, completed_agents, remaining_agents, progress_percentage } = progress;
+
+  const ALL_AGENTS = [
+    'CaseListener', 'CaseClassifier', 'QuestioningAgent',
+    'RightsAnalyzer', 'DocumentChecker', 'ActionPlanner',
+    'MisguideDetector', 'PdfFormatter'
+  ];
+
+  return (
+    <View style={styles.workflowContainer}>
+      <View style={styles.workflowProgressRow}>
+        <Text style={styles.workflowProgressText}>
+          Analyzing Case: <Text style={{ color: colors.accent, fontWeight: 'bold' }}>{current_agent}</Text>
+        </Text>
+        <Text style={styles.workflowPercentage}>{progress_percentage}%</Text>
+      </View>
+
+      <View style={styles.progressBarBg}>
+        <View style={[styles.progressBarFill, { width: `${progress_percentage}%` }]} />
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timelineScroll} contentContainerStyle={styles.timelineContent}>
+        {ALL_AGENTS.map((agent) => {
+          const isCompleted = completed_agents?.includes(agent);
+          const isWaiting = current_agent === agent;
+          
+          let icon = 'ellipse-outline';
+          let color = '#444';
+          let textColor = '#888';
+          let badgeBg = 'rgba(255,255,255,0.05)';
+
+          if (isCompleted) {
+            icon = 'checkmark-circle';
+            color = '#4CD964';
+            textColor = '#4CD964';
+            badgeBg = 'rgba(76, 217, 100, 0.1)';
+          } else if (isWaiting) {
+            icon = 'time';
+            color = '#FFCC00';
+            textColor = '#FFCC00';
+            badgeBg = 'rgba(255, 204, 0, 0.15)';
+          }
+
+          return (
+            <View key={agent} style={[styles.timelineBadge, { backgroundColor: badgeBg }]}>
+              <Ionicons name={icon} size={12} color={color} style={{ marginRight: 4 }} />
+              <Text style={[styles.timelineBadgeText, { color: textColor }]}>{agent}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
+
+const AgentQuestionCard = ({ questionData }) => {
+  if (!questionData) return null;
+
+  const { question, expected_input, agent } = questionData;
+
+  return (
+    <View style={styles.questionCardContainer}>
+      <View style={styles.questionCardHeader}>
+        <View style={styles.questionAgentBadge}>
+          <Ionicons name="sparkles" size={12} color="#000" style={{ marginRight: 4 }} />
+          <Text style={styles.questionAgentText}>{agent}</Text>
+        </View>
+        <Text style={styles.expectedInputText}>
+          Expected Input: <Text style={{ fontWeight: 'bold', color: colors.accent }}>{expected_input}</Text>
+        </Text>
+      </View>
+
+      <Text style={styles.questionText}>{question}</Text>
+
+      <View style={styles.questionCardFooter}>
+        <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 8 }} />
+        <Text style={styles.waitingText}>Waiting for your reply...</Text>
+      </View>
+    </View>
+  );
+};
+
+// -------------------------------------------------------------
+
 const ChatScreen = () => {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const route = useRoute();
   const navigation = useNavigation();
-  
+
   const user = useSelector(state => state.auth.user);
   const userName = user?.name || 'User';
-  
+
   const { sessions, currentSessionMessages, loadingMessages } = useSelector(state => state.chat);
-  
+
   // Accept sessionId from params, or null for a new session
   const [sessionId, setSessionId] = useState(route.params?.sessionId || null);
   const initialMessage = route.params?.initialMessage || null;
@@ -59,16 +226,74 @@ const ChatScreen = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  
+  // Streaming state for agent trace
+  const [activeStreamMessage, setActiveStreamMessage] = useState('');
+  const [agentTrace, setAgentTrace] = useState('');
 
   const flatListRef = useRef(null);
+  const chatInputRef = useRef(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+
+  // New interactive workflow states
+  const [currentWorkflowProgress, setCurrentWorkflowProgress] = useState(null);
+  const [currentAgentQuestion, setCurrentAgentQuestion] = useState(null);
 
   useEffect(() => {
     const fetchSession = async () => {
       try {
         const res = await axiosClient.get(`/chat/sessions/${sessionId}`);
-        setSession(res.data.data);
+        const sessionData = res.data.data;
+        setSession(sessionData);
+
+        if (sessionData) {
+          const AGENT_SEQUENCE = [
+            'CaseListener', 'CaseClassifier', 'QuestioningAgent',
+            'RightsAnalyzer', 'DocumentChecker', 'ActionPlanner',
+            'MisguideDetector', 'PdfFormatter'
+          ];
+          const currentStep = sessionData.current_step || 0;
+          const currentAgent = sessionData.current_agent;
+          const waitingForUser = sessionData.waiting_for_user;
+          const collectedContext = sessionData.collected_context || {};
+          const answers = collectedContext.answers || {};
+
+          if (currentAgent) {
+            const completedAgents = AGENT_SEQUENCE.slice(0, currentStep - 1);
+            const remainingAgents = AGENT_SEQUENCE.slice(currentStep);
+            const progressPercentage = Math.round(((currentStep - 1) / AGENT_SEQUENCE.length) * 100);
+
+            setCurrentWorkflowProgress({
+              current_agent: currentAgent,
+              current_step: currentStep,
+              completed_agents: completedAgents,
+              remaining_agents: remainingAgents,
+              progress_percentage: progressPercentage,
+            });
+
+            if (waitingForUser) {
+              const lastExpectedInput = answers.last_expected_input || 'generic_reply';
+              let questionText = "Aapke paas registry (Title deed) hai?";
+              if (lastExpectedInput === 'has_fard') {
+                questionText = "Fard ya inteqal available hai?";
+              } else if (lastExpectedInput === 'user_problem_detail') {
+                questionText = "Aap apne maslay ke baare mein thora tafseel se bata sakte hain taake hum behtar madad kar sakein?";
+              }
+              
+              setCurrentAgentQuestion({
+                question: questionText,
+                expected_input: lastExpectedInput,
+                agent: currentAgent,
+              });
+            } else {
+              setCurrentAgentQuestion(null);
+            }
+          } else {
+            setCurrentWorkflowProgress(null);
+            setCurrentAgentQuestion(null);
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch session', err);
       }
@@ -76,10 +301,85 @@ const ChatScreen = () => {
     if (sessionId) fetchSession();
   }, [sessionId]);
 
-  // Initialize socket and fetch history
+  // 1. Initialize socket and register listeners ONCE
+  useEffect(() => {
+    socketClient.connect();
+
+    const onSessionCreated = (data) => {
+      console.log('[Socket] session_created:', data);
+      setSessionId(data.sessionId);
+    };
+
+    const onMessageStream = (data) => {
+      setIsTyping(true);
+      if (data.trace) {
+        setAgentTrace(data.trace);
+      }
+      if (data.chunk) {
+        setActiveStreamMessage(prev => prev + data.chunk);
+      }
+    };
+
+    const onMessageDone = (data) => {
+      console.log('[Socket] message_done:', data);
+      setIsTyping(false);
+      setActiveStreamMessage('');
+      setAgentTrace('');
+      setCurrentAgentQuestion(null);
+      setCurrentWorkflowProgress(null);
+
+      dispatch(addMessageToSession({
+        _id: data.messageId,
+        role: 'assistant',
+        content: data.fullMessage,
+        audioUrl: data.audioUrl,
+        type: data.audioUrl ? 'audio' : 'text',
+        createdAt: new Date().toISOString()
+      }));
+    };
+
+    const onMessageError = (data) => {
+      console.log('[Socket] message_error:', data);
+      setIsTyping(false);
+      setActiveStreamMessage('');
+      setAgentTrace('');
+      Alert.alert('Message Failed', data.error || 'Something went wrong. Please try again.');
+    };
+
+    const onAgentQuestion = (data) => {
+      console.log('[Socket] agent_question:', data);
+      setCurrentAgentQuestion(data);
+      setIsTyping(false);
+      setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
+    };
+
+    const onWorkflowProgress = (data) => {
+      console.log('[Socket] workflow_progress:', data);
+      setCurrentWorkflowProgress(data);
+    };
+
+    socketClient.on('session_created', onSessionCreated);
+    socketClient.on('agent_stream', onMessageStream);
+    socketClient.on('message_done', onMessageDone);
+    socketClient.on('message_error', onMessageError);
+    socketClient.on('agent_question', onAgentQuestion);
+    socketClient.on('workflow_progress', onWorkflowProgress);
+
+    return () => {
+      socketClient.off('session_created', onSessionCreated);
+      socketClient.off('agent_stream', onMessageStream);
+      socketClient.off('message_done', onMessageDone);
+      socketClient.off('message_error', onMessageError);
+      socketClient.off('agent_question', onAgentQuestion);
+      socketClient.off('workflow_progress', onWorkflowProgress);
+    };
+  }, [dispatch]);
+
+  // 2. Fetch history and handle session state
   useEffect(() => {
     dispatch(clearCurrentSession());
-    socketClient.connect();
 
     if (sessionId) {
       dispatch(fetchSessionMessages({ sessionId }));
@@ -95,40 +395,6 @@ const ChatScreen = () => {
       // Clear initialMessage from params so it doesn't re-trigger
       navigation.setParams({ initialMessage: null });
     }
-
-    const onSessionCreated = (data) => {
-      setSessionId(data.sessionId);
-    };
-
-    const onMessageDone = (data) => {
-      setIsTyping(false);
-      // The backend returns { fullMessage, sessionId, messageId, audioUrl }
-      dispatch(addMessageToSession({
-        _id: data.messageId,
-        role: 'assistant',
-        content: data.fullMessage,
-        audioUrl: data.audioUrl,
-        type: data.audioUrl ? 'audio' : 'text',
-        createdAt: new Date().toISOString()
-      }));
-    };
-
-    const onMessageError = (data) => {
-      setIsTyping(false);
-      console.error('[Chat] Error:', data.error);
-      Alert.alert('Message Failed', data.error || 'Something went wrong. Please try again.');
-    };
-
-    socketClient.on('session_created', onSessionCreated);
-    socketClient.on('message_done', onMessageDone);
-    socketClient.on('message_error', onMessageError);
-
-    return () => {
-      socketClient.off('session_created', onSessionCreated);
-      socketClient.off('message_done', onMessageDone);
-      socketClient.off('message_error', onMessageError);
-      // Don't disconnect socket entirely, just cleanup listeners
-    };
   }, [sessionId, dispatch]);
 
   const openDrawer = () => {
@@ -158,6 +424,9 @@ const ChatScreen = () => {
 
     const tempId = Date.now().toString();
     const content = inputText.trim();
+
+    // Clear active question overlay since we responded
+    setCurrentAgentQuestion(null);
 
     // Add optimistic user message to Redux
     dispatch(addMessageToSession({
@@ -198,7 +467,7 @@ const ChatScreen = () => {
   const stopRecording = async () => {
     if (!recording) return;
     setIsRecording(false);
-    
+
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
@@ -209,6 +478,9 @@ const ChatScreen = () => {
         const base64Audio = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType.Base64,
         });
+
+        // Clear active question overlay since we responded
+        setCurrentAgentQuestion(null);
 
         // Add optimistic user message to Redux
         const tempId = Date.now().toString();
@@ -243,7 +515,7 @@ const ChatScreen = () => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
-        
+
         // Optimistic UI for attachment
         const tempId = Date.now().toString();
         dispatch(addMessageToSession({
@@ -297,7 +569,7 @@ const ChatScreen = () => {
               <Text
                 key={i}
                 style={styles.linkText}
-                onPress={() => Linking.openURL(part).catch(() => {})}
+                onPress={() => Linking.openURL(part).catch(() => { })}
               >
                 {part}
               </Text>
@@ -313,16 +585,16 @@ const ChatScreen = () => {
       if (item.type === 'voice' || item.type === 'audio' || item.audioUrl) {
         return <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />;
       }
-      
+
       if (item.type === 'attachment' || item.fileUrl) {
         const url = item.fileUrl || '';
         const isImage = /\.(png|jpe?g|gif|webp|bmp)$/i.test(url) || url.includes('/image/upload/') || (item.content && /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.content));
-        
+
         if (isImage && url) {
           return (
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => Linking.openURL(url).catch(() => {})}
+              onPress={() => Linking.openURL(url).catch(() => { })}
             >
               <Image
                 source={{ uri: url }}
@@ -346,11 +618,11 @@ const ChatScreen = () => {
             </TouchableOpacity>
           );
         }
-        
+
         return (
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center' }}
-            onPress={() => url && Linking.openURL(url).catch(() => {})}
+            onPress={() => url && Linking.openURL(url).catch(() => { })}
           >
             <Text style={{ fontSize: 20, marginRight: 8 }}>📄</Text>
             <Text style={[
@@ -363,8 +635,8 @@ const ChatScreen = () => {
           </TouchableOpacity>
         );
       }
-      
-      return renderTextContent(item.content || item.text);
+
+      return isUser ? renderTextContent(item.content || item.text) : renderArtifact(item.content || item.text);
     };
 
     return (
@@ -387,15 +659,13 @@ const ChatScreen = () => {
             isUser ? styles.userBubble : (isLawyer ? styles.lawyerBubble : styles.aiBubble),
             item.tempId && styles.pendingBubble,
           ]}>
-<<<<<<< HEAD
             {renderBubbleContent()}
-=======
             {(item.type === 'voice' || item.type === 'audio' || item.audioUrl) ? (
               <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />
             ) : item.type === 'attachment' || item.fileUrl ? (
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => {})}
+                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => { })}
               >
                 <Ionicons name="document-text" size={20} color={isUser ? "#000000" : colors.accent} style={{ marginRight: 8 }} />
                 <Text style={[
@@ -407,9 +677,8 @@ const ChatScreen = () => {
                 </Text>
               </TouchableOpacity>
             ) : (
-              renderTextContent(item.content || item.text)
+              isUser ? renderTextContent(item.content || item.text) : renderArtifact(item.content || item.text)
             )}
->>>>>>> beb734b6a90829f6f5930de949ffc01011485024
 
             {/* Bottom row: bookmark star + timestamp */}
             <View style={styles.messageMeta}>
@@ -429,180 +698,217 @@ const ChatScreen = () => {
     );
   };
 
-  // Messages from Redux are stored oldest-first (pushed in order).
-  // We use inverted FlatList so newest appears at the bottom — no manual reversal needed.
+  // Deduplicate messages to ensure every message renders exactly once
+  const uniqueMessages = React.useMemo(() => {
+    const seen = new Set();
+    // Keep the latest version by iterating from the end if needed,
+    // but Array.filter keeps the first occurrence which is fine for our oldest-first array
+    return currentSessionMessages.filter(msg => {
+      const id = msg._id || msg.tempId;
+      if (!id) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [currentSessionMessages]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         {/* HEADER */}
-      <View style={styles.header}>
-        {/* LEFT: Back button (if navigated here) or hamburger drawer */}
-        <View style={styles.headerLeft}>
-          {navigation.canGoBack() ? (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={colors.accent} />
+        <View style={styles.header}>
+          {/* LEFT: Back button (if navigated here) or hamburger drawer */}
+          <View style={styles.headerLeft}>
+            {navigation.canGoBack() ? (
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color={colors.accent} />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={openDrawer} style={styles.drawerButton}>
+              <Ionicons name="menu" size={24} color={colors.accent} />
             </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity onPress={openDrawer} style={styles.drawerButton}>
-            <Ionicons name="menu" size={24} color={colors.accent} />
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* CENTER: Title */}
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{session?.title || 'Chat Session'}</Text>
-          <TouchableOpacity 
-            disabled={!session?.lawyerId || user?.role === 'lawyer'} 
-            onPress={() => navigation.navigate(SCREENS.LAWYER_PROFILE, { lawyerId: session.lawyerId })}
-          >
-            <View style={styles.headerSubtitleRow}>
-              {session?.status === 'with_lawyer' ? (
-                <>
-                  <Ionicons name="shield-checkmark" size={12} color={colors.accent} style={{ marginRight: 4 }} />
-                  <Text style={styles.headerSubtitleText}>Lawyer Active</Text>
-                </>
-              ) : session?.status === 'resolved' ? (
-                <>
-                  <Ionicons name="checkmark-circle" size={12} color="#4CD964" style={{ marginRight: 4 }} />
-                  <Text style={[styles.headerSubtitleText, { color: '#4CD964' }]}>Resolved</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="sparkles" size={12} color={colors.accent} style={{ marginRight: 4 }} />
-                  <Text style={styles.headerSubtitleText}>Talash AI</Text>
-                </>
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
-        
-        {/* RIGHT: Action icons */}
-        <View style={styles.headerActions}>
-          {user?.role === 'lawyer' && session?.status !== 'resolved' && (
-            <TouchableOpacity style={styles.iconButton} onPress={async () => {
-              try {
-                await axiosClient.patch(`/chat/sessions/${sessionId}`, { status: 'resolved' });
-                Alert.alert('Success', 'Case marked as resolved');
-                navigation.goBack();
-              } catch (err) {
-                Alert.alert('Error', 'Failed to resolve case');
-              }
-            }}>
-              <Ionicons name="checkmark-circle-outline" size={20} color={colors.accent} />
+          {/* CENTER: Title */}
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{session?.title || 'Chat Session'}</Text>
+            <TouchableOpacity
+              disabled={!session?.lawyerId || user?.role === 'lawyer'}
+              onPress={() => navigation.navigate(SCREENS.LAWYER_PROFILE, { lawyerId: session.lawyerId })}
+            >
+              <View style={styles.headerSubtitleRow}>
+                {session?.status === 'with_lawyer' ? (
+                  <>
+                    <Ionicons name="shield-checkmark" size={12} color={colors.accent} style={{ marginRight: 4 }} />
+                    <Text style={styles.headerSubtitleText}>Lawyer Active</Text>
+                  </>
+                ) : session?.status === 'resolved' ? (
+                  <>
+                    <Ionicons name="checkmark-circle" size={12} color="#4CD964" style={{ marginRight: 4 }} />
+                    <Text style={[styles.headerSubtitleText, { color: '#4CD964' }]}>Resolved</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={12} color={colors.accent} style={{ marginRight: 4 }} />
+                    <Text style={styles.headerSubtitleText}>Talash AI</Text>
+                  </>
+                )}
+              </View>
             </TouchableOpacity>
-          )}
-          {user?.role === 'lawyer' && (
-            <TouchableOpacity style={styles.iconButton} onPress={async () => {
-              try {
-                const res = await axiosClient.get(`/chat/sessions/${sessionId}/summary`);
-                setAiSummary(res.data.data.summary);
-                setShowSummary(true);
-              } catch (err) {
-                Alert.alert('Error', 'Could not generate summary.');
-              }
-            }}>
-              <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.iconButton} onPress={() => sessionId && navigation.navigate(SCREENS.CHAT_DETAILS, { sessionId })}>
-            <Ionicons name="information-circle-outline" size={20} color={colors.accent} />
-          </TouchableOpacity>
-        </View>
-      </View>
+          </View>
 
-      {/* AI SUMMARY MODAL */}
-      {showSummary && (
-        <View style={styles.summaryOverlay}>
-          <View style={styles.summaryModal}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-              <Ionicons name="sparkles" size={20} color={colors.accent} style={{ marginRight: 8 }} />
-              <Text style={[styles.summaryTitle, { marginBottom: 0 }]}>AI Case Brief</Text>
-            </View>
-            <ScrollView style={{ maxHeight: 300 }}>
-              <Text style={styles.summaryText}>{aiSummary}</Text>
-            </ScrollView>
-            <TouchableOpacity style={styles.closeSummary} onPress={() => setShowSummary(false)}>
-              <Text style={styles.closeSummaryText}>Close Brief</Text>
+          {/* RIGHT: Action icons */}
+          <View style={styles.headerActions}>
+            {user?.role === 'lawyer' && session?.status !== 'resolved' && (
+              <TouchableOpacity style={styles.iconButton} onPress={async () => {
+                try {
+                  await axiosClient.patch(`/chat/sessions/${sessionId}`, { status: 'resolved' });
+                  Alert.alert('Success', 'Case marked as resolved');
+                  navigation.goBack();
+                } catch (err) {
+                  Alert.alert('Error', 'Failed to resolve case');
+                }
+              }}>
+                <Ionicons name="checkmark-circle-outline" size={20} color={colors.accent} />
+              </TouchableOpacity>
+            )}
+            {user?.role === 'lawyer' && (
+              <TouchableOpacity style={styles.iconButton} onPress={async () => {
+                try {
+                  const res = await axiosClient.get(`/chat/sessions/${sessionId}/summary`);
+                  setAiSummary(res.data.data.summary);
+                  setShowSummary(true);
+                } catch (err) {
+                  Alert.alert('Error', 'Could not generate summary.');
+                }
+              }}>
+                <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.iconButton} onPress={() => sessionId && navigation.navigate(SCREENS.CHAT_DETAILS, { sessionId })}>
+              <Ionicons name="information-circle-outline" size={20} color={colors.accent} />
             </TouchableOpacity>
           </View>
         </View>
-      )}
 
-      {/* CHAT MESSAGES AREA */}
-      {loadingMessages && currentSessionMessages.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={[...currentSessionMessages].reverse()}
-          keyExtractor={(item, index) => item._id?.toString() || index.toString()}
-          renderItem={renderMessage}
-          style={styles.messageList}
-          contentContainerStyle={styles.messageListContent}
-          inverted
-          removeClippedSubviews={false}
-          showsVerticalScrollIndicator={true}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          initialNumToRender={15}
-        />
-      )}
+        {/* WORKFLOW TIMELINE PROGRESS */}
+        <WorkflowTimeline progress={currentWorkflowProgress} />
 
-      {isTyping && (
-        <View style={styles.typingIndicatorContainer}>
-          <Text style={styles.typingText}>Talash AI is thinking...</Text>
-        </View>
-      )}
-
-      {/* BOTTOM INPUT BAR */}
-      <View style={styles.bottomInputBar}>
-        <TouchableOpacity style={styles.paperclipButton} onPress={handleAttachment}>
-          <Ionicons name="attach" size={22} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        <TextInput
-          style={[
-            styles.chatInput, 
-            isFocused && styles.chatInputFocused,
-            i18n.language === 'ur' && styles.urduInput
-          ]}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder={isRecording ? (i18n.language === 'ur' ? "آڈیو ریکارڈ ہو رہی ہے..." : "Recording audio...") : (t('typeQuestion') || 'Message')}
-          placeholderTextColor="#888888"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          editable={!isTyping && !isRecording}
-          multiline
-        />
-
-        {inputText.trim().length > 0 ? (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.sendButton, isTyping && { opacity: 0.5 }]} 
-            onPress={handleSend}
-            disabled={isTyping}
-          >
-            <Ionicons name="send" size={18} color={colors.accent} />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.micButton, isRecording && { backgroundColor: colors.error }]} 
-            onPressIn={startRecording}
-            onPressOut={stopRecording}
-            disabled={isTyping}
-          >
-            <Ionicons name={isRecording ? "stop" : "mic"} size={20} color={isRecording ? "#FFFFFF" : colors.accent} />
-          </TouchableOpacity>
+        {/* AI SUMMARY MODAL */}
+        {showSummary && (
+          <View style={styles.summaryOverlay}>
+            <View style={styles.summaryModal}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <Ionicons name="sparkles" size={20} color={colors.accent} style={{ marginRight: 8 }} />
+                <Text style={[styles.summaryTitle, { marginBottom: 0 }]}>AI Case Brief</Text>
+              </View>
+              <ScrollView style={{ maxHeight: 300 }}>
+                <Text style={styles.summaryText}>{aiSummary}</Text>
+              </ScrollView>
+              <TouchableOpacity style={styles.closeSummary} onPress={() => setShowSummary(false)}>
+                <Text style={styles.closeSummaryText}>Close Brief</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
-      </View>
+
+        {/* CHAT MESSAGES AREA */}
+        {loadingMessages && currentSessionMessages.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.accent} />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={[...uniqueMessages].reverse()}
+            keyExtractor={(item, index) => item._id?.toString() || index.toString()}
+            renderItem={renderMessage}
+            style={styles.messageList}
+            contentContainerStyle={styles.messageListContent}
+            inverted
+            removeClippedSubviews={false}
+            showsVerticalScrollIndicator={true}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            initialNumToRender={15}
+          />
+        )}
+
+        {isTyping && (
+          <View style={styles.streamingContainer}>
+            {agentTrace ? (
+              <View style={styles.traceBox}>
+                <Ionicons name="terminal-outline" size={14} color="#00ff00" style={{ marginRight: 6 }} />
+                <Text style={styles.traceText}>{agentTrace}</Text>
+              </View>
+            ) : null}
+            {activeStreamMessage ? (
+              <View style={[styles.bubble, styles.aiBubble, { alignSelf: 'flex-start', maxWidth: '85%', marginBottom: 12 }]}>
+                {renderArtifact(activeStreamMessage)}
+                <Text style={[styles.typingText, { marginTop: 8 }]}>Talash AI is typing...</Text>
+              </View>
+            ) : (
+              <View style={styles.typingIndicatorContainer}>
+                <Text style={styles.typingText}>
+                  {currentWorkflowProgress?.current_agent
+                    ? `📋 ${currentWorkflowProgress.current_agent} is analyzing your case...`
+                    : 'Talash AI is thinking...'}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* AGENT QUESTION CARD */}
+        <AgentQuestionCard questionData={currentAgentQuestion} />
+
+        {/* BOTTOM INPUT BAR */}
+        <View style={styles.bottomInputBar}>
+          <TouchableOpacity style={styles.paperclipButton} onPress={handleAttachment}>
+            <Ionicons name="attach" size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TextInput
+            ref={chatInputRef}
+            style={[
+              styles.chatInput,
+              isFocused && styles.chatInputFocused,
+              i18n.language === 'ur' && styles.urduInput
+            ]}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder={isRecording ? (i18n.language === 'ur' ? "آڈیو ریکارڈ ہو رہی ہے..." : "Recording audio...") : (t('typeQuestion') || 'Message')}
+            placeholderTextColor="#888888"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            editable={!isTyping && !isRecording}
+            multiline
+          />
+
+          {inputText.trim().length > 0 ? (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.sendButton, isTyping && { opacity: 0.5 }]}
+              onPress={handleSend}
+              disabled={isTyping}
+            >
+              <Ionicons name="send" size={18} color={colors.accent} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.micButton, isRecording && { backgroundColor: colors.error }]}
+              onPressIn={startRecording}
+              onPressOut={stopRecording}
+              disabled={isTyping}
+            >
+              <Ionicons name={isRecording ? "stop" : "mic"} size={20} color={isRecording ? "#FFFFFF" : colors.accent} />
+            </TouchableOpacity>
+          )}
+        </View>
       </KeyboardAvoidingView>
 
       {/* DRAWER */}
@@ -622,8 +928,8 @@ const ChatScreen = () => {
 
         <ScrollView style={styles.drawerScroll} contentContainerStyle={styles.drawerScrollContent}>
           {sessions.map(item => (
-            <TouchableOpacity 
-              key={item._id} 
+            <TouchableOpacity
+              key={item._id}
               style={styles.historyItem}
               onPress={() => {
                 closeDrawer();
@@ -721,13 +1027,13 @@ const styles = StyleSheet.create({
   },
   paperclipIcon: { fontSize: 22 },
   chatInput: {
-    flex: 1, backgroundColor: '#222222', borderRadius: 22, color: '#FFFFFF', 
-    fontSize: 15, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, 
+    flex: 1, backgroundColor: '#222222', borderRadius: 22, color: '#FFFFFF',
+    fontSize: 15, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12,
     maxHeight: 120, minHeight: 44,
   },
   chatInputFocused: { backgroundColor: '#2a2a2a' },
-  actionButton: { 
-    width: 44, height: 44, borderRadius: 22, 
+  actionButton: {
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center', marginBottom: 2,
   },
   sendButton: { backgroundColor: 'rgba(201, 168, 76, 0.15)', borderWidth: 1, borderColor: colors.accent },
@@ -759,6 +1065,120 @@ const styles = StyleSheet.create({
   summaryText: { color: '#FFFFFF', fontSize: 14, lineHeight: 22 },
   closeSummary: { marginTop: 20, backgroundColor: colors.accent, padding: 12, borderRadius: 8, alignItems: 'center' },
   closeSummaryText: { color: '#000000', fontWeight: 'bold' },
+  artifactCard: {
+    backgroundColor: 'rgba(30, 30, 30, 0.8)', borderRadius: 12, borderWidth: 1, padding: 12, marginVertical: 6, width: '100%'
+  },
+  artifactHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#333', paddingBottom: 6 },
+  artifactTitle: { fontSize: 14, fontWeight: 'bold' },
+  artifactBody: { paddingTop: 4 },
+  artifactText: { color: '#FFFFFF', fontSize: 13, lineHeight: 20, marginBottom: 4 },
+  pdfButton: { backgroundColor: '#5AC8FA', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 4 },
+  streamingContainer: { paddingHorizontal: 16, paddingBottom: 8 },
+  traceBox: { backgroundColor: '#000000', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#333', flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+  traceText: { color: '#00ff00', fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', flex: 1 },
+  workflowContainer: {
+    backgroundColor: '#161616',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  workflowProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  workflowProgressText: {
+    color: '#E0E0E0',
+    fontSize: 12,
+  },
+  workflowPercentage: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: '#333333',
+    borderRadius: 2,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: colors.accent,
+  },
+  timelineScroll: {
+    flexGrow: 0,
+  },
+  timelineContent: {
+    gap: 8,
+    paddingRight: 16,
+  },
+  timelineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  timelineBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  questionCardContainer: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  questionCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  questionAgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  questionAgentText: {
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  expectedInputText: {
+    color: '#888888',
+    fontSize: 10,
+  },
+  questionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  questionCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  waitingText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
 });
 
 export default ChatScreen;

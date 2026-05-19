@@ -1,4 +1,4 @@
-# INSAAF OS — Production Agent Pipeline
+# Talash AI — Production Agent Pipeline
 
 This plan outlines the architecture and implementation steps for INSAAF OS, Pakistan's AI legal guidance system, strictly following the provided `prompt.txt`.
 

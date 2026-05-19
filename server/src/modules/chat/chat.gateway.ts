@@ -10,7 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { UseGuards, Logger } from '@nestjs/common';
 import { WsJwtGuard } from './guards/ws-jwt.guard';
-import { ChatService } from './chat.service';
+import { ChatService, AGENT_SEQUENCE } from './chat.service';
 import { AiService } from './ai.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -90,6 +90,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const role = (client as any).user.role;
     let { sessionId, content, type } = data;
 
+    this.logger.log(`[Socket Receive] Received "send_message" event for session: ${sessionId || 'NEW_SESSION'} from user: ${userId}`);
+
     let session;
     if (!sessionId) {
       session = await this.chatService.createSession(userId, 'General');
@@ -102,7 +104,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const sessions = await this.chatService.getUserSessions(userId, { limit: 100 });
       session = sessions.data.find(s => s._id.toString() === sessionId);
     }
-    
+
     const category = session?.category || 'General';
 
     // Auto-Classification logic for new/general cases
@@ -125,30 +127,43 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const media = await this.chatService.getSessionMedia(sessionId as string);
     const attachments = media.map(m => m.fileUrl).filter(url => !!url);
 
-    try {
-      const fullResponse = await this.aiService.streamTextResponse(sessionId as string, content as string, client, history, category as string, attachments, userId);
-      
-      const savedMsg = await this.chatService.saveAssistantMessage(
+    // ── Workflow Orchestration ─────────────────────────────────────────────
+    // Read the persisted state BEFORE touching the pipeline.
+    const workflowState = await this.chatService.getWorkflowState(sessionId as string);
+
+    if (workflowState.waiting_for_user) {
+      // The pipeline paused for input — store the reply and resume.
+      this.logger.log(`[Workflow] Session ${sessionId} is resuming agent: ${workflowState.current_agent}`);
+      client.emit('agent_stream', { trace: `▶️ Resuming ${workflowState.current_agent}...` });
+
+      // Identify where to save the reply based on last_expected_input
+      const lastExpectedInput = (workflowState.collected_context as any).answers?.last_expected_input || 'generic_reply';
+
+      // Persist the incoming answer under collected_context.answers.[current_agent].[lastExpectedInput]
+      await this.chatService.saveAgentAnswer(
         sessionId as string,
-        userId,
-        fullResponse,
-        'text',
-        'text',
+        `${workflowState.current_agent}.${lastExpectedInput}`,
+        content,
       );
 
-      client.emit('message_done', { 
-        fullMessage: fullResponse, 
-        sessionId: sessionId as string,
-        messageId: savedMsg._id 
-      });
+      // Clear the waiting flag so the pipeline can progress.
+      await this.chatService.setWaitingForUser(sessionId as string, false);
+    } else {
+      // Fresh request — reset workflow and start from Agent 1.
+      this.logger.log(`[Workflow] Session ${sessionId} starting a new pipeline run.`);
+      await this.chatService.initWorkflow(sessionId as string);
+    }
 
-      // Send Push Notification
-      this.notificationService.sendNotification({
-        title: 'New Message from Talash AI',
-        body: fullResponse.substring(0, 100) + '...',
-        targetType: 'user',
-        userId: userId,
-      }).catch(err => this.logger.error('Failed to send push notification', err));
+    try {
+      await this.resumePipelineFromAgent(
+        sessionId as string,
+        content as string,
+        client,
+        history,
+        category as string,
+        attachments,
+        userId,
+      );
 
       // Mark user's message as read
       const userMessages = await this.chatService.getSessionMessages(userId, sessionId as string, { limit: 1 });
@@ -159,6 +174,144 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.error('Error handling send_message', error);
       client.emit('message_error', { error: 'Failed to process message', sessionId: sessionId as string });
     }
+  }
+
+  /**
+   * Orchestrates sequential execution of pipeline agents.
+   * Runs the current agent, handles pauses for user input,
+   * updates the session context, and recursively/iteratively triggers the next agent.
+   */
+  async resumePipelineFromAgent(
+    sessionId: string,
+    content: string,
+    client: Socket,
+    history: any[],
+    category: string,
+    attachments: string[],
+    userId: string,
+  ): Promise<void> {
+    let freshState = await this.chatService.getWorkflowState(sessionId);
+    let currentAgent: string | null = freshState.current_agent;
+
+    while (currentAgent) {
+      this.logger.log(`[Workflow Loop] Running agent ${currentAgent} for session: ${sessionId}`);
+
+      // Emit real-time workflow progress to client
+      const currentStep = freshState.current_step;
+      const completedAgents = AGENT_SEQUENCE.slice(0, currentStep - 1);
+      const remainingAgents = AGENT_SEQUENCE.slice(currentStep);
+      const progressPercentage = Math.round(((currentStep - 1) / AGENT_SEQUENCE.length) * 100);
+
+      client.emit('workflow_progress', {
+        current_agent: currentAgent,
+        current_step: currentStep,
+        total_steps: AGENT_SEQUENCE.length,
+        completed_agents: completedAgents,
+        remaining_agents: remainingAgents,
+        progress_percentage: progressPercentage,
+      });
+
+      // Call single agent
+      const response = await this.aiService.streamTextResponse(
+        sessionId,
+        content,
+        client,
+        history,
+        category,
+        attachments,
+        userId,
+        freshState.collected_context,
+        currentAgent,
+      );
+
+      // 1. Check if the agent paused for user input
+      if (response && response.pause_for_user === true) {
+        this.logger.log(`[Workflow Pause] Agent ${currentAgent} requested pause.`);
+
+        // Save waiting state
+        await this.chatService.setWaitingForUser(sessionId, true);
+
+        // Store the expected field name so the gateway knows where to save the next response
+        const expectedInput = response.expected_information || response.expected_input || 'generic_reply';
+        await this.chatService.saveAgentAnswer(sessionId, 'last_expected_input', expectedInput);
+
+        // Push a readable question text into chat trace
+        client.emit('agent_stream', { chunk: `\n\n**${currentAgent}**: ${response.question}\n` });
+
+        // Emit 'agent_question' socket event
+        client.emit('agent_question', {
+          question: response.question,
+          expected_input: expectedInput,
+          expected_information: response.expected_information || expectedInput,
+          reason: response.reason || '',
+          priority: response.priority || 'medium',
+          agent: response.agent || currentAgent,
+        });
+
+        return; // HALT remaining loop execution, wait for next user reply!
+      }
+
+      // 2. Check if agent failed
+      if (response && response.pipeline_status === 'failed') {
+        this.logger.error(`[Workflow Error] Agent ${currentAgent} failed to execute: ${response.error}`);
+        client.emit('message_error', { error: `Agent ${currentAgent} failed to execute.`, sessionId });
+        return;
+      }
+
+      // 3. Agent succeeded! Save its outputs
+      this.logger.log(`[Workflow Loop] Agent ${currentAgent} completed successfully.`);
+      const partialOutput = response.final_output || {};
+
+      // Save the output under its namespace (e.g. collected_context.answers.CaseListener)
+      await this.chatService.saveAgentAnswer(sessionId, currentAgent, partialOutput);
+
+      // Sync user_problem and category directly to context roots if extracted
+      if (currentAgent === 'CaseListener' && partialOutput.cleaned_input) {
+        await this.chatService.updateWorkflowContext(sessionId, { user_problem: partialOutput.cleaned_input });
+      }
+      if (currentAgent === 'CaseClassifier' && partialOutput.primary_category) {
+        await this.chatService.updateWorkflowContext(sessionId, { category: partialOutput.primary_category });
+      }
+
+      // Move to next agent in sequence
+      const nextAgent = await this.chatService.moveToNextAgent(sessionId);
+      freshState = await this.chatService.getWorkflowState(sessionId);
+      currentAgent = nextAgent;
+    }
+
+    // 4. Entire sequence completed!
+    this.logger.log(`[Workflow Complete] All agents completed successfully for session: ${sessionId}`);
+
+    const finalState = await this.chatService.getWorkflowState(sessionId);
+    const pdfFormatterOutput = finalState.collected_context.answers?.PdfFormatter || {};
+
+    // Save final generated outputs under generated_outputs
+    await this.chatService.updateWorkflowContext(sessionId, { generated_outputs: pdfFormatterOutput });
+
+    const fullResponse = "Case assessment has been successfully generated. Please check your dashboard below.";
+
+    const savedMsg = await this.chatService.saveAssistantMessage(
+      sessionId,
+      userId,
+      fullResponse,
+      'text',
+      'text',
+    );
+
+    this.logger.log(`[Socket Emit] Emitting "message_done" to client for session: ${sessionId}`);
+    client.emit('message_done', {
+      fullMessage: fullResponse,
+      sessionId: sessionId,
+      messageId: savedMsg._id
+    });
+
+    // Send Push Notification
+    this.notificationService.sendNotification({
+      title: 'New Message from Talash AI',
+      body: 'Your full legal assessment has been generated.',
+      targetType: 'user',
+      userId: userId,
+    }).catch(err => this.logger.error('Failed to send push notification', err));
   }
 
   @UseGuards(WsJwtGuard)

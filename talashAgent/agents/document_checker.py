@@ -1,9 +1,11 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import run_agent_with_retry
+from gemini_client import get_vertex_client, DEEP_MODEL
 from google import genai
 import os
+
+client = get_vertex_client()
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +83,10 @@ Return ONLY valid JSON. Do not include markdown formatting.
 """
 
 def _call_gemini(combined_context: dict):
-    client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))
     lang = combined_context.get("language_detected", "English")
     prompt = f"Target Language: {lang}\nContext:\n{json.dumps(combined_context)}"
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model=DEEP_MODEL,
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -95,9 +96,37 @@ def _call_gemini(combined_context: dict):
     )
     return response.text
 
-def run_document_checker(combined_context: dict) -> dict:
+def run_document_checker(combined_context: dict, on_trace=None) -> dict:
     try:
-        result_str = run_agent_with_retry(_call_gemini, combined_context)
+        category = combined_context.get("category_hint", "General")
+        
+        # Check answers from MongoDB workflow state
+        answers = combined_context.get("answers", {})
+        doc_answers = answers.get("DocumentChecker", {})
+        
+        has_registry = doc_answers.get("has_registry")
+        has_fard = doc_answers.get("has_fard")
+        
+        # We enforce document questions for property/land disputes or General classifications
+        is_property_case = any(x in str(category).lower() for x in ["property", "dispute", "qabza", "land", "general"])
+        
+        if is_property_case:
+            if has_registry is None:
+                return {
+                    "pause_for_user": True,
+                    "question": "Aapke paas registry (Title deed) hai?",
+                    "expected_input": "has_registry",
+                    "agent": "DocumentChecker"
+                }
+            elif has_fard is None:
+                return {
+                    "pause_for_user": True,
+                    "question": "Fard ya inteqal available hai?",
+                    "expected_input": "has_fard",
+                    "agent": "DocumentChecker"
+                }
+
+        result_str = _call_gemini(combined_context)
         res = json.loads(result_str)
         res["language_detected"] = combined_context.get("language_detected", "English")
         res["emotional_tone"] = combined_context.get("emotional_tone", "calm")

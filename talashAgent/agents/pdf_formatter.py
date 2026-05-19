@@ -1,10 +1,12 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import run_agent_with_retry
+from gemini_client import get_vertex_client, FAST_MODEL
 from google import genai
 import os
 import time
+
+client = get_vertex_client()
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
@@ -19,7 +21,7 @@ class PDFContentOutput(BaseModel):
 system_prompt = """
 You are INSAAF OS PDFFormatter.
 
-Compile all agent outputs into 3 documents.
+Compile all agent outputs, retrieved laws, procedures, and draft notice templates into 3 professional, fully articulated legal documents.
 Accept FULL or PARTIAL outputs — never crash.
 If any agent output missing: use placeholder.
 
@@ -30,20 +32,18 @@ Document 1 — Case Summary Report:
 - Readiness Score with breakdown
 - Missing documents with costs
 - Key risks highlighted
+- INJECT ALL RETRIEVED STATUTORY LAWS AND COURT PROCEDURES IN DETAIL WITH CITATIONS (e.g. Specific Relief Act 1877 Section 8).
 
 Document 2 — Legal Draft:
-Based on case type generate:
-- inheritance → Succession Certificate Application
-- property_dispute → Legal Notice to opponent
-- criminal_fir → FIR Application Draft
-- family_law → Khula/Maintenance Application
-- labour_rights → Labour Complaint Letter
-- tenancy → Eviction/Rent dispute notice
-- government_services → Formal complaint letter
+Compile and format the provided legal draft template based on case type:
+- Property dispute / general civil dispute → Format and include the generated LEGAL NOTICE TO OPPONENT.
+- Criminal offenses / police issues → Format and include the generated FIRST INFORMATION REPORT (FIR) APPLICATION DRAFT.
+- Other issues → Format and include the generated SOLEMN AFFIDAVIT.
+Ensure all details are fully fleshed out with placeholders [User Name], [Opponent Name], etc., where details are missing.
 
 Document 3 — Free Legal Aid Request Letter:
 - Professional format
-- Formal request to DLEC or NGO
+- Formal request to the closest legal aid body (DLEC, Punjab/Sindh Bar Council, or AGHS Legal Aid Cell) using details from retrieved resources.
 - Case summary included
 - Placeholders for user personal details
 
@@ -54,11 +54,10 @@ CRITICAL RULE: The language for the PDF content MUST BE ENGLISH OR ROMAN URDU ON
 Return ONLY valid JSON. Do not include markdown formatting.
 """
 
-def _call_gemini(combined_context: dict):
-    client = genai.Client(vertexai=True, api_key=os.environ.get("VERTEX_API_KEY"))
-    prompt = f"Context:\n{json.dumps(combined_context)}"
+def _call_gemini(combined_context: dict, templates_context: str):
+    prompt = f"Draft Templates Context:\n{templates_context}\n\nContext:\n{json.dumps(combined_context)}"
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model=FAST_MODEL,
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -87,9 +86,30 @@ def _create_pdf(filename: str, title: str, content: str):
     doc.build(story)
     return filepath
 
-def run_pdf_formatter(combined_context: dict) -> dict:
+def run_pdf_formatter(combined_context: dict, on_trace=None) -> dict:
     try:
-        result_str = run_agent_with_retry(_call_gemini, combined_context)
+        from tools.legal_tools import generate_notice, generate_affidavit, generate_fir_draft
+        
+        # Generate legal drafts using unified legal tools
+        notice_draft = generate_notice(combined_context, on_trace=on_trace)
+        affidavit_draft = generate_affidavit(combined_context, on_trace=on_trace)
+        fir_draft = generate_fir_draft(combined_context, on_trace=on_trace)
+        
+        templates_context = (
+            f"=== GENERATED LEGAL NOTICE DEMAND ===\n{notice_draft}\n\n"
+            f"=== GENERATED SOLEMN AFFIDAVIT ===\n{affidavit_draft}\n\n"
+            f"=== GENERATED FIR APPLICATION DRAFT ===\n{fir_draft}\n"
+        )
+        
+        # Save generated drafts under tool_outputs
+        combined_context.setdefault("tool_outputs", {})
+        combined_context["tool_outputs"]["PDFFormatter"] = {
+            "notice_draft": notice_draft,
+            "affidavit_draft": affidavit_draft,
+            "fir_draft": fir_draft
+        }
+        
+        result_str = _call_gemini(combined_context, templates_context)
         res = json.loads(result_str)
         
         timestamp = int(time.time())

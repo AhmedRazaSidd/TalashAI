@@ -2,8 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Use 10.0.2.2 for Android emulators to access localhost, otherwise use localhost for iOS/web
-const BASE_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+const BASE_URL = 'http://192.168.100.66:3000';
 
 const axiosClient = axios.create({
   baseURL: BASE_URL,

@@ -95,6 +95,20 @@ const CreateCaseScreen = () => {
     }
   };
 
+  const getCategoryIcon = (cat, isSelected) => {
+    const color = colors.accent;
+    let name = 'briefcase-sharp';
+    
+    if (cat.icon === 'home' || cat.name === 'Property Law') name = 'home-sharp';
+    else if (cat.icon === 'people' || cat.name === 'Family & Marriage') name = 'people-sharp';
+    else if (cat.icon === 'shield' || cat.name === 'Criminal Defense') name = 'shield-checkmark-sharp';
+    else if (cat.icon === 'briefcase' || cat.name === 'Labor & Employment') name = 'briefcase-sharp';
+    else if (cat.icon === 'cash' || cat.name === 'Financial & Tax') name = 'cash-sharp';
+    else if (cat.icon === 'document' || cat.name === 'Civil Litigation') name = 'document-text-sharp';
+    
+    return <Ionicons name={name} size={24} color={color} style={{ marginBottom: 8 }} />;
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView 
@@ -112,7 +126,7 @@ const CreateCaseScreen = () => {
           <Text style={styles.headerTitle}>{t('newCase') || 'New Case'}</Text>
           <View style={styles.rightPlaceholder} />
         </View>
-
+ 
         {/* CATEGORY SELECTION */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('selectCategory') || 'Select Category'}</Text>
@@ -126,7 +140,7 @@ const CreateCaseScreen = () => {
                   onPress={() => setSelectedCategory(cat)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.gridIcon}>{cat.icon}</Text>
+                  {getCategoryIcon(cat, isSelected)}
                   <Text style={[styles.gridLabel, isSelected && styles.gridLabelActive]}>
                     {cat.name}
                   </Text>

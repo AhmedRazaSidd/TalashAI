@@ -10,7 +10,7 @@ echo.
 
 :: 1. Launch Python AI FastAPI Server
 echo [+] Launching Python AI Agent (FastAPI Port 8000)...
-start "Talash AI FastAPI Server" cmd /c "cd talashAgent && (if exist .venv\Scripts\activate.bat (call .venv\Scripts\activate.bat) else if exist venv\Scripts\activate.bat (call venv\Scripts\activate.bat)) && python -m uvicorn api:app --port 8000"
+start "Talash AI FastAPI Server" cmd /c "cd talashAgent && (if exist .venv\Scripts\activate.bat (call .venv\Scripts\activate.bat) else if exist venv\Scripts\activate.bat (call venv\Scripts\activate.bat)) && python -m uvicorn api:app --host 0.0.0.0 --port 8000"
 
 :: 2. Launch NestJS Backend Server
 echo [+] Launching NestJS Backend Server (Port 3000)...

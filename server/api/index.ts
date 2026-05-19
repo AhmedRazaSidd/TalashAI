@@ -7,24 +7,22 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Create Express instance
 const expressApp = express();
 
 async function bootstrap() {
-  try {
-    const app = await NestFactory.create(
-      AppModule,
-      new ExpressAdapter(expressApp),
-    );
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(expressApp),
+  );
 
-  // Enable CORS (behaves like your main.ts setup)
+  // CORS
   app.enableCors({
     origin: '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
 
-  // Enable Validation Pipe globally
+  // Validation
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -33,27 +31,29 @@ async function bootstrap() {
     }),
   );
 
-  // Setup Swagger API docs
-  const config = new DocumentBuilder()
-    .setTitle('Talash API')
-    .setDescription('The Talash App API documentation')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  // 🔥 Swagger ONLY in development
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('Talash API')
+      .setDescription('The Talash App API documentation')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api', app, document);
+  }
 
   await app.init();
-  } catch (error) {
-    console.error('Failed to bootstrap NestJS application:', error);
-    throw error;
-  }
 }
 
-// Keep a reference to the initialized promise for warm boots
+// Warm boot caching
 const appPromise = bootstrap();
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse,
+) {
   await appPromise;
-  expressApp(req, res);
+  expressApp(req as any, res as any);
 }

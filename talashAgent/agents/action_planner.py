@@ -28,6 +28,8 @@ class ActionPlannerOutput(BaseModel):
     total_estimated_cost: str
     free_legal_aid_available: bool
     nearest_free_aid: str
+    legal_aid_request_simulated: bool = Field(description="True to indicate legal aid request simulation")
+    legal_aid_confirmation_number: str = Field(description="Generated unique confirmation number for legal aid request")
 
 system_prompt = """
 You are INSAAF OS ActionPlanner.
@@ -40,6 +42,8 @@ Rules:
 - Each step: action + location + documents + time + cost + escalation
 - At least one step immediately actionable
 - Correct legal sequence — mandatory
+- Simulate a Free Legal Aid Request for DLEC, Bar Council, or Legal Aid Authority.
+- Generate a unique confirmation number (e.g. T-LA-2026-XXXX).
 - If distressed/urgent tone: add emotional support note at start
 - Match user language: Ensure the textual descriptions (title, action, location, etc.) are in the target language (Urdu script, Roman Urdu, or English).
 - Return ONLY valid JSON. Do not include markdown formatting.
@@ -105,5 +109,7 @@ def run_action_planner(combined_context: dict, on_trace=None) -> dict:
             "total_estimated_time": "Unknown",
             "total_estimated_cost": "Unknown",
             "free_legal_aid_available": False,
-            "nearest_free_aid": "Unknown"
+            "nearest_free_aid": "Unknown",
+            "legal_aid_request_simulated": True,
+            "legal_aid_confirmation_number": "T-LA-2026-FALB"
         }

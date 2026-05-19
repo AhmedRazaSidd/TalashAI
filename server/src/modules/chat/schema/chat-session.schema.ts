@@ -16,9 +16,15 @@ export interface WorkflowContext {
     missing_information: string[];
     confidence_score: number;
   };
+  completed_agents?: string[];
+  readiness_score?: number;
+  generated_pdfs?: string[];
+  rights_analysis?: any;
+  action_plan?: any;
+  scam_protection?: any;
 }
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, minimize: false })
 export class ChatSession {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
   userId: MongooseSchema.Types.ObjectId;
@@ -35,6 +41,9 @@ export class ChatSession {
   @Prop({ default: 'active', enum: ['active', 'waiting_for_lawyer', 'with_lawyer', 'resolved'] })
   status: string;
 
+  @Prop({ default: 'ACTIVE' })
+  workflow_status: string;
+
   @Prop({ default: null })
   current_agent: string;
 
@@ -43,6 +52,15 @@ export class ChatSession {
 
   @Prop({ default: false })
   waiting_for_user: boolean;
+
+  @Prop({ type: [String], default: [] })
+  completed_agents: string[];
+
+  @Prop({ type: Number, default: 0 })
+  readiness_score: number;
+
+  @Prop({ type: [MongooseSchema.Types.Mixed], default: [] })
+  generated_pdfs: any[];
 
   @Prop({
     type: {
@@ -65,7 +83,13 @@ export class ChatSession {
           missing_information: [],
           confidence_score: 0
         })
-      }
+      },
+      completed_agents: { type: [String], default: [] },
+      readiness_score: { type: Number, default: 0 },
+      generated_pdfs: { type: [MongooseSchema.Types.Mixed], default: [] },
+      rights_analysis: { type: MongooseSchema.Types.Mixed, default: {} },
+      action_plan: { type: MongooseSchema.Types.Mixed, default: {} },
+      scam_protection: { type: MongooseSchema.Types.Mixed, default: {} }
     },
     default: () => ({
       user_problem: null,
@@ -79,13 +103,20 @@ export class ChatSession {
         answered_topics: {},
         missing_information: [],
         confidence_score: 0
-      }
+      },
+      completed_agents: [],
+      readiness_score: 0,
+      generated_pdfs: [],
+      rights_analysis: {},
+      action_plan: {},
+      scam_protection: {}
     }),
   })
   collected_context: WorkflowContext;
 }
 
 export const ChatSessionSchema = SchemaFactory.createForClass(ChatSession);
+ChatSessionSchema.set('minimize', false);
 
 ChatSessionSchema.index({ userId: 1, status: 1 });
 ChatSessionSchema.index({ lawyerId: 1, status: 1 });

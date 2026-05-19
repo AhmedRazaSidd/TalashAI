@@ -77,20 +77,36 @@ class SocketClient {
 
   on(event, callback) {
     if (this.socket) {
+      // Remove existing listener to prevent duplicate registration
+      this.socket.off(event, callback);
       this.socket.on(event, callback);
     } else {
       // Buffer the listener — will be registered once socket connects
+      // Deduplicate pending listeners
+      this._pendingListeners = this._pendingListeners.filter(
+        (l) => !(l.event === event && l.callback === callback)
+      );
       this._pendingListeners.push({ event, callback });
     }
   }
 
   off(event, callback) {
     if (this.socket) {
-      this.socket.off(event, callback);
+      if (callback) {
+        this.socket.off(event, callback);
+      } else {
+        this.socket.off(event);
+      }
     }
     // Also remove from pending buffer if not yet connected
     this._pendingListeners = this._pendingListeners.filter(
-      (l) => !(l.event === event && l.callback === callback)
+      (l) => {
+        if (callback) {
+          return !(l.event === event && l.callback === callback);
+        } else {
+          return l.event !== event;
+        }
+      }
     );
   }
 

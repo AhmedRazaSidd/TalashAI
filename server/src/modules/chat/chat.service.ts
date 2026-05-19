@@ -339,16 +339,18 @@ export class ChatService {
    * and waiting_for_user will be false.
    */
   async getWorkflowState(sessionId: string) {
-    const session = await this.sessionModel
-      .findById(sessionId)
-      .select('current_agent current_step waiting_for_user collected_context')
-      .exec();
-    if (!session) throw new NotFoundException('Session not found');
+    const session = await this.sessionModel.findById(sessionId).lean();
+    if (!session) throw new Error('Session not found');
+
     return {
-      current_agent: session.current_agent ?? null,
-      current_step: session.current_step ?? 0,
+      current_agent: session.current_agent,
+      current_step: session.current_step,
       waiting_for_user: session.waiting_for_user ?? false,
+      completed_agents: session.completed_agents ?? [],
+      readiness_score: session.readiness_score ?? 0,
+      generated_pdfs: session.generated_pdfs ?? [],
       collected_context: session.collected_context ?? {},
+      workflow_status: session.workflow_status || 'ACTIVE',
     };
   }
 
@@ -395,6 +397,44 @@ export class ChatService {
   }
 
   /**
+   * Batches all agent updates (answer, completed agents, readiness score, PDFs, etc.)
+   * into a single database update operation for maximum performance and stability.
+   */
+  async batchAgentCompletion(
+    sessionId: string,
+    agentKey: string,
+    fullContext: any,
+    completedAgents: string[],
+    contextUpdates: Record<string, any>,
+    sessionUpdates: Record<string, any>,
+  ): Promise<void> {
+    const updateObj: Record<string, any> = {
+      ...sessionUpdates,
+      completed_agents: completedAgents,
+    };
+    
+    // Instead of nesting the entire python context inside answers.agentKey,
+    // we should replace the entire collected_context because fullContext IS the
+    // fully aggregated state returned by the Python pipeline.
+    if (fullContext && Object.keys(fullContext).length > 0) {
+      // Apply the overrides directly to fullContext to avoid MongoDB path conflicts
+      fullContext.completed_agents = completedAgents;
+      for (const [key, val] of Object.entries(contextUpdates)) {
+        fullContext[key] = val;
+      }
+      updateObj['collected_context'] = fullContext;
+    } else {
+      // Fallback if fullContext is missing (shouldn't happen)
+      updateObj[`collected_context.completed_agents`] = completedAgents;
+      for (const [key, val] of Object.entries(contextUpdates)) {
+        updateObj[`collected_context.${key}`] = val;
+      }
+    }
+    
+    await this.sessionModel.findByIdAndUpdate(sessionId, { $set: updateObj });
+  }
+
+  /**
    * Updates specific keys inside collected_context.
    */
   async updateWorkflowContext(
@@ -418,6 +458,10 @@ export class ChatService {
       current_agent: AGENT_SEQUENCE[0],
       current_step: 1,
       waiting_for_user: false,
+      completed_agents: [],
+      readiness_score: 0,
+      generated_pdfs: [],
+      workflow_status: 'ACTIVE',
       collected_context: {
         user_problem: null,
         category: null,
@@ -431,6 +475,9 @@ export class ChatService {
           missing_information: [],
           confidence_score: 0,
         },
+        completed_agents: [],
+        readiness_score: 0,
+        generated_pdfs: [],
       },
     });
   }
@@ -440,7 +487,10 @@ export class ChatService {
    * The gateway will check this flag before deciding whether to resume or restart.
    */
   async setWaitingForUser(sessionId: string, waiting: boolean): Promise<void> {
-    await this.sessionModel.findByIdAndUpdate(sessionId, { waiting_for_user: waiting });
+    await this.sessionModel.findByIdAndUpdate(sessionId, {
+      waiting_for_user: waiting,
+      workflow_status: waiting ? 'WAITING_FOR_USER' : 'ACTIVE',
+    });
   }
 
   /**
@@ -450,6 +500,7 @@ export class ChatService {
     await this.sessionModel.findByIdAndUpdate(sessionId, {
       current_agent: null,
       waiting_for_user: false,
+      workflow_status: 'COMPLETED',
     });
   }
 }

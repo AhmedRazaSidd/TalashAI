@@ -65,7 +65,15 @@ def run_case_listener(text: str, input_type: str, on_trace=None) -> dict:
                 "agent": "CaseListener"
             }
         result_str = _call_gemini(text, input_type)
-        return json.loads(result_str)
+        res = json.loads(result_str)
+        
+        # Enforce exact output keys required by Talash AI Step 1
+        res["facts"] = res.get("key_facts", [])
+        res["emotional_state"] = res.get("emotional_tone", "calm")
+        res["urgency_level"] = "high" if len(res.get("urgency_signals", [])) > 0 else "medium"
+        res["language"] = res.get("language_detected", "English")
+        
+        return res
     except Exception as e:
         logger.error(f"Agent 1 failed: {e}")
         return {
@@ -75,5 +83,9 @@ def run_case_listener(text: str, input_type: str, on_trace=None) -> dict:
             "partial_output": {},
             "reason": str(e),
             "instruction_to_next_agent": "use available data and proceed",
-            "language_detected": "English"
+            "language_detected": "English",
+            "facts": [],
+            "emotional_state": "calm",
+            "urgency_level": "medium",
+            "language": "English"
         }

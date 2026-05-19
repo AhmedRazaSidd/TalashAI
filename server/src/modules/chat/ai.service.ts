@@ -134,14 +134,31 @@ export class AiService {
                   });
                 }
 
-                // Card 4: PDF Links
+                // Card 4: PDF Links (all generated PDFs)
                 if (pdf_files.length > 0) {
-                  const file = pdf_files[0];
+                  const mappedPdfs = pdf_files.map((file: any) => {
+                    const rawFilename = typeof file === 'string' ? file : (file.filename || file.url || 'Document.pdf');
+                    const filename = rawFilename.split('/').pop() || 'Document.pdf';
+                    const url = rawFilename.startsWith('http') ? rawFilename : `http://localhost:8000/pdf/${filename}`;
+                    
+                    let docName = 'Legal Document';
+                    if (filename.includes('CaseSummary')) {
+                      docName = 'Case Summary Report';
+                    } else if (filename.includes('LegalDraft')) {
+                      docName = 'Legal Draft';
+                    } else if (filename.includes('LegalAidLetter')) {
+                      docName = 'Free Legal Aid Letter';
+                    }
+                    return {
+                      name: docName,
+                      url: url
+                    };
+                  });
+
                   client.emit('agent_stream', {
                     chunk: `\n\`\`\`json\n${JSON.stringify({
-                      type: "pdf_link",
-                      url: file.url || file,
-                      filename: file.filename || 'Action_Plan.pdf'
+                      type: "pdf_list",
+                      pdfs: mappedPdfs
                     })}\n\`\`\`\n`
                   });
                 }

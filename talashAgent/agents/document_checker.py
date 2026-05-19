@@ -129,6 +129,36 @@ def run_document_checker(combined_context: dict, on_trace=None) -> dict:
         res = json.loads(result_str)
         res["language_detected"] = combined_context.get("language_detected", "English")
         res["emotional_tone"] = combined_context.get("emotional_tone", "calm")
+        
+        # Enforce exact keys for missing documents requested in Step 5
+        missing_docs = res.get("documents_missing", [])
+        mapped_missing = []
+        for doc in missing_docs:
+            name = doc.get("name", "Document")
+            where = doc.get("where_to_get", "Relevant Office")
+            cost_str = str(doc.get("cost", "500"))
+            time_str = str(doc.get("time_required", "2"))
+            
+            # Simple numeric extraction helper
+            import re
+            cost_nums = re.findall(r'\d+', cost_str)
+            cost_pkr = int(cost_nums[0]) if cost_nums else 500
+            
+            time_nums = re.findall(r'\d+', time_str)
+            days = int(time_nums[0]) if time_nums else 2
+            
+            mapped_missing.append({
+                "name": name,
+                "urgency": doc.get("urgency", "medium"),
+                "where_to_get": where,
+                "time_required": time_str,
+                "cost": cost_str,
+                "document": name,
+                "location": where,
+                "estimated_cost_pkr": cost_pkr,
+                "estimated_days": days
+            })
+        res["documents_missing"] = mapped_missing
         return res
     except Exception as e:
         logger.error(f"Agent 5 failed: {e}")

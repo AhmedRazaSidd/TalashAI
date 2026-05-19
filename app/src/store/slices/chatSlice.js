@@ -67,8 +67,15 @@ const chatSlice = createSlice({
   },
   reducers: {
     addMessageToSession: (state, action) => {
-      // Push to END — inverted FlatList renders end as bottom of screen
-      state.currentSessionMessages.push(action.payload);
+      const exists = state.currentSessionMessages.some(m => 
+        (action.payload._id && m._id === action.payload._id) || 
+        (action.payload.tempId && m.tempId === action.payload.tempId) ||
+        (action.payload.tempId && m._id === action.payload.tempId) ||
+        (action.payload._id && m.tempId === action.payload._id)
+      );
+      if (!exists) {
+        state.currentSessionMessages.push(action.payload);
+      }
     },
     clearCurrentSession: (state) => {
       state.currentSessionMessages = [];

@@ -233,6 +233,7 @@ const ChatScreen = () => {
 
   const flatListRef = useRef(null);
   const chatInputRef = useRef(null);
+  const isSendingRef = useRef(false);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
 
@@ -305,6 +306,15 @@ const ChatScreen = () => {
   useEffect(() => {
     socketClient.connect();
 
+    // Clean up first to prevent duplicate registrations
+    socketClient.off('session_created');
+    socketClient.off('agent_stream');
+    socketClient.off('message_done');
+    socketClient.off('message_error');
+    socketClient.off('agent_question');
+    socketClient.off('workflow_progress');
+    socketClient.off('pdf_ready');
+
     const onSessionCreated = (data) => {
       console.log('[Socket] session_created:', data);
       setSessionId(data.sessionId);
@@ -323,6 +333,7 @@ const ChatScreen = () => {
     const onMessageDone = (data) => {
       console.log('[Socket] message_done:', data);
       setIsTyping(false);
+      isSendingRef.current = false;
       setActiveStreamMessage('');
       setAgentTrace('');
       setCurrentAgentQuestion(null);
@@ -341,6 +352,7 @@ const ChatScreen = () => {
     const onMessageError = (data) => {
       console.log('[Socket] message_error:', data);
       setIsTyping(false);
+      isSendingRef.current = false;
       setActiveStreamMessage('');
       setAgentTrace('');
       Alert.alert('Message Failed', data.error || 'Something went wrong. Please try again.');
@@ -350,6 +362,7 @@ const ChatScreen = () => {
       console.log('[Socket] agent_question:', data);
       setCurrentAgentQuestion(data);
       setIsTyping(false);
+      isSendingRef.current = false;
       setTimeout(() => {
         chatInputRef.current?.focus();
       }, 100);
@@ -360,22 +373,33 @@ const ChatScreen = () => {
       setCurrentWorkflowProgress(data);
     };
 
+    const onPdfReady = (data) => {
+      console.log('[Socket] pdf_ready:', data);
+      if (sessionId) {
+        dispatch(fetchSessionMessages({ sessionId }));
+      }
+    };
+
     socketClient.on('session_created', onSessionCreated);
     socketClient.on('agent_stream', onMessageStream);
     socketClient.on('message_done', onMessageDone);
     socketClient.on('message_error', onMessageError);
     socketClient.on('agent_question', onAgentQuestion);
     socketClient.on('workflow_progress', onWorkflowProgress);
+    socketClient.on('pdf_ready', onPdfReady);
+    console.log('[SOCKET_LISTENER_REGISTERED] Registered all socket listeners.');
 
     return () => {
-      socketClient.off('session_created', onSessionCreated);
-      socketClient.off('agent_stream', onMessageStream);
-      socketClient.off('message_done', onMessageDone);
-      socketClient.off('message_error', onMessageError);
-      socketClient.off('agent_question', onAgentQuestion);
-      socketClient.off('workflow_progress', onWorkflowProgress);
+      socketClient.off('session_created');
+      socketClient.off('agent_stream');
+      socketClient.off('message_done');
+      socketClient.off('message_error');
+      socketClient.off('agent_question');
+      socketClient.off('workflow_progress');
+      socketClient.off('pdf_ready');
+      console.log('[SOCKET_LISTENER_CLEANED] Deregistered all socket listeners.');
     };
-  }, [dispatch]);
+  }, [dispatch, sessionId]);
 
   // 2. Fetch history and handle session state
   useEffect(() => {
@@ -420,10 +444,13 @@ const ChatScreen = () => {
   };
 
   const handleSend = () => {
-    if (!inputText.trim() || isTyping) return;
+    if (!inputText.trim() || isTyping || isSendingRef.current) return;
+    isSendingRef.current = true;
 
-    const tempId = Date.now().toString();
+    const tempId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
     const content = inputText.trim();
+
+    console.log(`[SEND_MESSAGE] Sending message client-side: ${content} with tempId: ${tempId}`);
 
     // Clear active question overlay since we responded
     setCurrentAgentQuestion(null);
@@ -445,7 +472,8 @@ const ChatScreen = () => {
     socketClient.emit('send_message', {
       sessionId,
       content,
-      type: 'text'
+      type: 'text',
+      clientMessageId: tempId
     });
   };
 
@@ -474,6 +502,9 @@ const ChatScreen = () => {
       setRecording(null);
 
       if (uri && sessionId) {
+        if (isSendingRef.current) return;
+        isSendingRef.current = true;
+
         // Read file as base64
         const base64Audio = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType.Base64,
@@ -483,7 +514,8 @@ const ChatScreen = () => {
         setCurrentAgentQuestion(null);
 
         // Add optimistic user message to Redux
-        const tempId = Date.now().toString();
+        const tempId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+        console.log(`[SEND_MESSAGE] Sending voice message client-side with tempId: ${tempId}`);
         dispatch(addMessageToSession({
           _id: tempId,
           tempId,
@@ -498,7 +530,8 @@ const ChatScreen = () => {
 
         socketClient.emit('voice_message', {
           sessionId,
-          audioBase64: base64Audio
+          audioBase64: base64Audio,
+          clientMessageId: tempId
         });
       }
     } catch (err) {
@@ -660,25 +693,6 @@ const ChatScreen = () => {
             item.tempId && styles.pendingBubble,
           ]}>
             {renderBubbleContent()}
-            {(item.type === 'voice' || item.type === 'audio' || item.audioUrl) ? (
-              <AudioPlayer audioUrl={item.audioUrl} isUser={isUser} />
-            ) : item.type === 'attachment' || item.fileUrl ? (
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => { })}
-              >
-                <Ionicons name="document-text" size={20} color={isUser ? "#000000" : colors.accent} style={{ marginRight: 8 }} />
-                <Text style={[
-                  styles.bubbleText,
-                  isUser ? styles.userText : styles.aiText,
-                  { textDecorationLine: 'underline' }
-                ]}>
-                  {item.content || 'Document'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              isUser ? renderTextContent(item.content || item.text) : renderArtifact(item.content || item.text)
-            )}
 
             {/* Bottom row: bookmark star + timestamp */}
             <View style={styles.messageMeta}>
@@ -886,15 +900,15 @@ const ChatScreen = () => {
             placeholderTextColor="#888888"
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            editable={!isTyping && !isRecording}
+            editable={(!isTyping || currentAgentQuestion !== null) && !isRecording}
             multiline
           />
 
           {inputText.trim().length > 0 ? (
             <TouchableOpacity
-              style={[styles.actionButton, styles.sendButton, isTyping && { opacity: 0.5 }]}
+              style={[styles.actionButton, styles.sendButton, (isTyping && currentAgentQuestion === null) && { opacity: 0.5 }]}
               onPress={handleSend}
-              disabled={isTyping}
+              disabled={isTyping && currentAgentQuestion === null}
             >
               <Ionicons name="send" size={18} color={colors.accent} />
             </TouchableOpacity>
@@ -903,7 +917,7 @@ const ChatScreen = () => {
               style={[styles.actionButton, styles.micButton, isRecording && { backgroundColor: colors.error }]}
               onPressIn={startRecording}
               onPressOut={stopRecording}
-              disabled={isTyping}
+              disabled={isTyping && currentAgentQuestion === null}
             >
               <Ionicons name={isRecording ? "stop" : "mic"} size={20} color={isRecording ? "#FFFFFF" : colors.accent} />
             </TouchableOpacity>
@@ -1178,6 +1192,54 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 12,
     fontStyle: 'italic',
+  },
+  pdfRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 8,
+    padding: 10,
+    marginVertical: 4,
+    width: '100%',
+  },
+  pdfInfoCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  pdfItemName: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+    paddingRight: 6,
+  },
+  pdfActionRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  pdfOpenButton: {
+    backgroundColor: '#5AC8FA',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pdfDownloadButton: {
+    backgroundColor: '#34C759',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pdfBtnText: {
+    color: '#000000',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
 });
 

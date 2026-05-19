@@ -598,3 +598,16 @@ async def analyze(req: AnalyzeRequest):
                 yield {"event": "final", "data": json.dumps(event["data"])}
 
     return EventSourceResponse(event_generator())
+
+@app.get("/pdf/{filename}")
+async def serve_pdf(filename: str):
+    from fastapi.responses import FileResponse
+    import os
+    pdf_path = f"./outputs/{filename}"
+    if os.path.exists(pdf_path):
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            filename=filename
+        )
+    return {"error": "PDF not found"}

@@ -70,6 +70,12 @@ def run_case_classifier(agent1_output: dict, on_trace=None) -> dict:
         res = json.loads(result_str)
         res["language_detected"] = agent1_output.get("language_detected", "English")
         res["emotional_tone"] = agent1_output.get("emotional_tone", "calm")
+        
+        # Enforce exact output keys required by Talash AI Step 2
+        res["case_type"] = res.get("primary_category", "general_civil")
+        res["confidence"] = res.get("confidence", 90)
+        res["jurisdiction"] = res.get("court_jurisdiction", "Pakistan")
+        
         return res
     except Exception as e:
         logger.error(f"Agent 2 failed: {e}")
@@ -81,5 +87,8 @@ def run_case_classifier(agent1_output: dict, on_trace=None) -> dict:
             "reason": str(e),
             "instruction_to_next_agent": "use available data and proceed",
             "language_detected": agent1_output.get("language_detected", "English"),
-            "emotional_tone": agent1_output.get("emotional_tone", "calm")
+            "emotional_tone": agent1_output.get("emotional_tone", "calm"),
+            "case_type": "general_civil",
+            "confidence": 50,
+            "jurisdiction": "Pakistan"
         }

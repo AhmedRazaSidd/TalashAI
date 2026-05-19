@@ -4,11 +4,7 @@ from pydantic import BaseModel, Field
 from gemini_client import get_vertex_client, FAST_MODEL, make_config
 import os
 import time
-
 client = get_vertex_client()
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +34,7 @@ Compile and format the provided legal draft template based on case type:
 - Property dispute / general civil dispute → Format and include the generated LEGAL NOTICE TO OPPONENT.
 - Criminal offenses / police issues → Format and include the generated FIRST INFORMATION REPORT (FIR) APPLICATION DRAFT.
 - Other issues → Format and include the generated SOLEMN AFFIDAVIT.
-Ensure all details are fully fleshed out with placeholders [User Name], [Opponent Name], etc., where details are missing.
+Ensure all details are fully fleshed out with placeholders [User Name], [Opponent Name], [CNIC], [Address], [Date] where details are missing.
 
 Document 3 — Free Legal Aid Request Letter:
 - Professional format
@@ -53,8 +49,94 @@ CRITICAL RULE: The language for the PDF content MUST BE ENGLISH OR ROMAN URDU ON
 Return ONLY valid JSON. Do not include markdown formatting.
 """
 
-def _call_gemini(combined_context: dict, templates_context: str):
-    prompt = f"Draft Templates Context:\n{templates_context}\n\nContext:\n{json.dumps(combined_context)}"
+def extract_agent_data(combined_context: dict) -> str:
+    # 1. Rights Analysis
+    rights_text = ""
+    rights_data = combined_context.get("rights_analysis") or {}
+    if isinstance(rights_data, dict):
+        rights_list = rights_data.get("rights") or []
+        for r in rights_list:
+            if isinstance(r, dict):
+                r_title = r.get("right") or r.get("title") or "Legal Right"
+                r_exp = r.get("explanation") or r.get("description") or ""
+                r_ref = r.get("law_reference") or r.get("citation") or ""
+                rights_text += f"- {r_title}: {r_exp} (Ref: {r_ref})\n"
+    if not rights_text:
+        rights_text = "- No specific legal rights were identified.\n"
+
+    # 2. Document Check & Readiness Score
+    doc_data = combined_context.get("document_check") or {}
+    readiness_score = doc_data.get("readiness_score") or combined_context.get("readiness_score") or 0
+    docs_text = ""
+    if isinstance(doc_data, dict):
+        missing_list = doc_data.get("documents_missing") or []
+        for d in missing_list:
+            if isinstance(d, dict):
+                d_name = d.get("document") or d.get("name") or "Required Document"
+                d_loc = d.get("location") or d.get("source") or "Relevant Authority"
+                d_cost = d.get("estimated_cost_pkr") or d.get("cost") or "0"
+                d_days = d.get("estimated_days") or d.get("days") or "0"
+                docs_text += f"- {d_name} (Source: {d_loc}, Cost: PKR {d_cost}, Time: {d_days} days)\n"
+    if not docs_text:
+        docs_text = "- All required documents are available.\n"
+
+    # 3. Action Plan Steps
+    action_data = combined_context.get("action_plan") or {}
+    action_text = ""
+    free_aid = "No"
+    if isinstance(action_data, dict):
+        if action_data.get("free_legal_aid_available") or action_data.get("free_legal_aid_eligible"):
+            free_aid = "Yes"
+        steps = action_data.get("action_plan") or []
+        for idx, step in enumerate(steps):
+            if isinstance(step, dict):
+                step_val = step.get("step") or step.get("action") or step.get("title") or ""
+            else:
+                step_val = str(step)
+            if step_val:
+                action_text += f"{idx + 1}. {step_val}\n"
+    if not action_text:
+        action_text = "1. Consult a certified legal representative for detailed guidance.\n"
+
+    # 4. Scam Protection (Red Flags & Risks)
+    scam_data = combined_context.get("scam_protection") or {}
+    scam_text = ""
+    fraud_risk = "low"
+    if isinstance(scam_data, dict):
+        fraud_risk = scam_data.get("fraud_risk") or scam_data.get("risk_level") or "low"
+        flags = scam_data.get("red_flags") or []
+        for f in flags:
+            if isinstance(f, dict):
+                f_val = f.get("flag") or f.get("description") or ""
+            else:
+                f_val = str(f)
+            if f_val:
+                scam_text += f"- {f_val}\n"
+    if not scam_text:
+        scam_text = "- No immediate misguide attempt or fraud pattern detected.\n"
+
+    compiled_summary = (
+        f"1. LEGAL RIGHTS IDENTIFIED:\n{rights_text}\n"
+        f"2. DOCUMENT READINESS SCORE: {readiness_score}%\n"
+        f"MISSING REQUIRED DOCUMENTS:\n{docs_text}\n"
+        f"3. RECOMMENDED ACTION PLAN STEPS:\n{action_text}"
+        f"Free Legal Aid Eligible: {free_aid}\n\n"
+        f"4. SCAM PROTECTION & RISKS:\n"
+        f"Fraud Risk Level: {fraud_risk}\n"
+        f"Detected Red Flags / Key Risks:\n{scam_text}"
+    )
+    return compiled_summary
+
+def _call_gemini(combined_context: dict, templates_context: str, compiled_workflow_data: str):
+    # Safely serialize using default=str to avoid ObjectId or datetime failures
+    serialized_context = json.dumps(combined_context, default=str)
+    prompt = (
+        f"Compiled Agent Outputs Context:\n{compiled_workflow_data}\n\n"
+        f"Draft Templates Context:\n{templates_context}\n\n"
+        f"Full Context JSON:\n{serialized_context}"
+    )
+    
+    print(f"[PDF Formatter] Calling Gemini with prompt length: {len(prompt)} characters")
     response = client.models.generate_content(
         model=FAST_MODEL,
         contents=prompt,
@@ -64,31 +146,21 @@ def _call_gemini(combined_context: dict, templates_context: str):
             response_schema=PDFContentOutput,
         ),
     )
+    print(f"[PDF Formatter] Gemini response received. Length: {len(response.text)} characters")
     return response.text
 
-def _create_pdf(filename: str, title: str, content: str):
-    os.makedirs("outputs", exist_ok=True)
-    filepath = os.path.join("outputs", filename)
-    doc = SimpleDocTemplate(filepath, pagesize=letter)
-    styles = getSampleStyleSheet()
-    story = []
-    
-    story.append(Paragraph(title, styles['Title']))
-    story.append(Spacer(1, 12))
-    
-    # Split content by newlines and add to story
-    for line in content.split('\n'):
-        if line.strip():
-            story.append(Paragraph(line.strip(), styles['Normal']))
-            story.append(Spacer(1, 6))
-            
-    doc.build(story)
-    return filepath
-
 def run_pdf_formatter(combined_context: dict, on_trace=None) -> dict:
+    print("=== PDF DEBUG START ===")
+    print(f"Incoming Context: {json.dumps(combined_context, default=str)}")
+    print("=== PDF DEBUG END ===")
+    
     try:
         from tools.legal_tools import generate_notice, generate_affidavit, generate_fir_draft
         
+        # Ensure we have the user problem text for the draft notice
+        if "cleaned_input" not in combined_context and "user_problem" in combined_context:
+            combined_context["cleaned_input"] = combined_context["user_problem"]
+
         # Generate legal drafts using unified legal tools
         notice_draft = generate_notice(combined_context, on_trace=on_trace)
         affidavit_draft = generate_affidavit(combined_context, on_trace=on_trace)
@@ -108,20 +180,96 @@ def run_pdf_formatter(combined_context: dict, on_trace=None) -> dict:
             "fir_draft": fir_draft
         }
         
-        result_str = _call_gemini(combined_context, templates_context)
+        compiled_workflow_data = extract_agent_data(combined_context)
+        result_str = _call_gemini(combined_context, templates_context, compiled_workflow_data)
+        
+        print("=== PDF DEBUG START ===")
+        print(f"Generated Content: {result_str}")
+        print("=== PDF DEBUG END ===")
+        
         res = json.loads(result_str)
         
-        timestamp = int(time.time())
-        doc1_path = _create_pdf(f"INSAAF_CaseSummary_{timestamp}.pdf", "Case Summary Report", res.get("document_1_summary", "Missing Content"))
-        doc2_path = _create_pdf(f"INSAAF_LegalDraft_{timestamp}.pdf", "Legal Draft", res.get("document_2_draft", "Missing Content"))
-        doc3_path = _create_pdf(f"INSAAF_LegalAidLetter_{timestamp}.pdf", "Free Legal Aid Request Letter", res.get("document_3_aid", "Missing Content"))
+        doc1_content = res.get("document_1_summary", "Missing Content")
+        doc2_content = res.get("document_2_draft", "Missing Content")
+        doc3_content = res.get("document_3_aid", "Missing Content")
+
+        print("=== CONTENT VARIABLES ===")
+        print(f"case_summary_content (len {len(doc1_content)}): {doc1_content[:200]}...")
+        print(f"legal_draft_content (len {len(doc2_content)}): {doc2_content[:200]}...")
+        print(f"legal_aid_content (len {len(doc3_content)}): {doc3_content[:200]}...")
+        print("=========================")
         
         return {
             "status": "success",
-            "pdf_files": [doc1_path, doc2_path, doc3_path]
+            "case_summary": doc1_content,
+            "legal_draft": doc2_content,
+            "legal_aid_letter": doc3_content,
+            "generated_pdfs": []
         }
     except Exception as e:
         logger.error(f"Agent 8 failed: {e}")
+        print(f"[PDF Formatter] Main path failed due to: {e}. Executing robust dynamic fallback...")
+        try:
+            timestamp = int(time.time())
+            
+            # Re-import generators if needed
+            from tools.legal_tools import generate_notice, generate_affidavit, generate_fir_draft
+            
+            prob = combined_context.get("user_problem") or combined_context.get("cleaned_input") or "Legal assessment dispute."
+            cat = combined_context.get("category") or "General Legal Matter"
+            
+            workflow_summary = extract_agent_data(combined_context)
+            
+            doc1_content = (
+                f"CASE SUMMARY REPORT\n\n"
+                f"Case Details: {prob}\n"
+                f"Case Category: {cat}\n\n"
+                f"{workflow_summary}\n\n"
+                f"DISCLAIMER: Generated by INSAAF OS for informational purposes only. Not legal advice. Consult a licensed lawyer before taking action."
+            )
+            
+            cat_lower = str(cat).lower()
+            if "property" in cat_lower or "civil" in cat_lower or "dispossession" in cat_lower:
+                doc2_content = generate_notice(combined_context)
+            elif "police" in cat_lower or "criminal" in cat_lower or "assault" in cat_lower or "threat" in cat_lower:
+                doc2_content = generate_fir_draft(combined_context)
+            else:
+                doc2_content = generate_affidavit(combined_context)
+                
+            doc2_content += "\n\nDISCLAIMER: Generated by INSAAF OS for informational purposes only. Not legal advice. Consult a licensed lawyer before taking action."
+            
+            aid_num = combined_context.get("action_plan", {}).get("legal_aid_confirmation_number") if isinstance(combined_context.get("action_plan"), dict) else None
+            if not aid_num:
+                aid_num = f"T-LA-{timestamp // 1000}"
+                
+            doc3_content = (
+                f"APPLICATION FOR FREE LEGAL ASSISTANCE & AID\n\n"
+                f"To,\n"
+                f"The Chairman / Secretary,\n"
+                f"District Legal Education Committee (DLEC) / Bar Council / Legal Aid Authority,\n"
+                f"Lahore / Karachi, Pakistan.\n\n"
+                f"SUBJECT: REQUEST FOR PROVISION OF FREE LEGAL AID (REF: {aid_num})\n\n"
+                f"Respected Sir,\n\n"
+                f"I am writing to formally request free legal representation and counseling under financial hardship.\n\n"
+                f"Case Details:\n"
+                f"- Applicant: [User Name]\n"
+                f"- CNIC: [User CNIC]\n"
+                f"- Matter Category: {cat}\n"
+                f"- Ref Confirmation Slug: {aid_num}\n\n"
+                f"Brief Facts of the Dispute:\n"
+                f"{prob}\n\n"
+                f"It is requested that a defense counsel be appointed at the expense of the state/committee to represent my interests before courts of law, as I am unable to bear legal expenses.\n\n"
+                f"Sincerely,\n"
+                f"[User Name]\n"
+                f"Address: [User Address]\n\n"
+                f"DISCLAIMER: Generated by INSAAF OS for informational purposes only. Not legal advice. Consult a licensed lawyer before taking action."
+            )
+        except Exception as inner_e:
+            logger.error(f"PDF Formatter inner fallback failed: {inner_e}")
+            doc1_content = "Fallback Case Summary Report Content"
+            doc2_content = "Fallback Legal Draft Content"
+            doc3_content = "Fallback Free Legal Aid Request Letter Content"
+            
         return {
             "agent": "PDFFormatter",
             "status": "failed",
@@ -129,5 +277,8 @@ def run_pdf_formatter(combined_context: dict, on_trace=None) -> dict:
             "partial_output": {},
             "reason": str(e),
             "instruction_to_next_agent": "pipeline finished",
-            "pdf_files": []
+            "case_summary": doc1_content,
+            "legal_draft": doc2_content,
+            "legal_aid_letter": doc3_content,
+            "generated_pdfs": []
         }

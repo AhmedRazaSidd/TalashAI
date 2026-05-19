@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { ExpressAdapter } from '@nestjs/platform-express';
@@ -10,10 +11,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const expressApp = express();
 
 async function bootstrap() {
-  const app = await NestFactory.create(
-    AppModule,
-    new ExpressAdapter(expressApp),
-  );
+  try {
+    const app = await NestFactory.create(
+      AppModule,
+      new ExpressAdapter(expressApp),
+    );
 
   // Enable CORS (behaves like your main.ts setup)
   app.enableCors({
@@ -42,6 +44,10 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.init();
+  } catch (error) {
+    console.error('Failed to bootstrap NestJS application:', error);
+    throw error;
+  }
 }
 
 // Keep a reference to the initialized promise for warm boots

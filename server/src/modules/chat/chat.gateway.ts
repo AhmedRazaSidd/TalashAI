@@ -232,17 +232,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         await this.chatService.setWaitingForUser(sessionId, true);
 
         // Store the expected field name so the gateway knows where to save the next response
-        await this.chatService.saveAgentAnswer(sessionId, 'last_expected_input', response.expected_input);
+        const expectedInput = response.expected_information || response.expected_input || 'generic_reply';
+        await this.chatService.saveAgentAnswer(sessionId, 'last_expected_input', expectedInput);
+
+        // Push a readable question text into chat trace
+        client.emit('agent_stream', { chunk: `\n\n**${currentAgent}**: ${response.question}\n` });
 
         // Emit 'agent_question' socket event
         client.emit('agent_question', {
           question: response.question,
-          expected_input: response.expected_input,
-          agent: response.agent,
+          expected_input: expectedInput,
+          expected_information: response.expected_information || expectedInput,
+          reason: response.reason || '',
+          priority: response.priority || 'medium',
+          agent: response.agent || currentAgent,
         });
-
-        // Push a readable question text into chat trace
-        client.emit('agent_stream', { chunk: `\n\n**${currentAgent}**: ${response.question}\n` });
 
         return; // HALT remaining loop execution, wait for next user reply!
       }

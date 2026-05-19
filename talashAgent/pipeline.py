@@ -137,7 +137,10 @@ async def run_pipeline_stream(
         "QuestioningAgent": {
             "msg_key": "agent3_check",
             "run": lambda callback: call_agent_with_retry(run_questioning_agent, context, on_trace=callback),
-            "update": lambda res: context.update({"questions_from_agent3": res.get("questions", [])})
+            "update": lambda res: context.update({
+                "investigation_memory": res.get("investigation_memory", {}),
+                "questions_from_agent3": res.get("questions_from_agent3", [])
+            })
         },
         "RightsAnalyzer": {
             "msg_key": "agent4",
@@ -210,7 +213,10 @@ async def run_pipeline_stream(
                 "pause_for_user": True,
                 "agent": target_agent,
                 "question": result.get("question"),
-                "expected_input": result.get("expected_input"),
+                "expected_input": result.get("expected_input") or result.get("expected_information") or "generic_reply",
+                "expected_information": result.get("expected_information"),
+                "reason": result.get("reason"),
+                "priority": result.get("priority"),
                 "partial_output": context
             }}
             return

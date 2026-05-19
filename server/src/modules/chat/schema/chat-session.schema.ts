@@ -10,6 +10,12 @@ export interface WorkflowContext {
   documents?: any[];
   risk_flags?: string[];
   generated_outputs?: any;
+  investigation_memory?: {
+    already_asked_questions: string[];
+    answered_topics: Record<string, any>;
+    missing_information: string[];
+    confidence_score: number;
+  };
 }
 
 @Schema({ timestamps: true })
@@ -46,6 +52,20 @@ export class ChatSession {
       documents: { type: [MongooseSchema.Types.Mixed], default: [] },
       risk_flags: { type: [String], default: [] },
       generated_outputs: { type: MongooseSchema.Types.Mixed, default: null },
+      investigation_memory: {
+        type: {
+          already_asked_questions: { type: [String], default: [] },
+          answered_topics: { type: MongooseSchema.Types.Mixed, default: {} },
+          missing_information: { type: [String], default: [] },
+          confidence_score: { type: Number, default: 0 }
+        },
+        default: () => ({
+          already_asked_questions: [],
+          answered_topics: {},
+          missing_information: [],
+          confidence_score: 0
+        })
+      }
     },
     default: () => ({
       user_problem: null,
@@ -54,6 +74,12 @@ export class ChatSession {
       documents: [],
       risk_flags: [],
       generated_outputs: null,
+      investigation_memory: {
+        already_asked_questions: [],
+        answered_topics: {},
+        missing_information: [],
+        confidence_score: 0
+      }
     }),
   })
   collected_context: WorkflowContext;

@@ -425,6 +425,12 @@ export class ChatService {
         documents: [],
         risk_flags: [],
         generated_outputs: null,
+        investigation_memory: {
+          already_asked_questions: [],
+          answered_topics: {},
+          missing_information: [],
+          confidence_score: 0,
+        },
       },
     });
   }

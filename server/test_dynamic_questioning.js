@@ -145,7 +145,7 @@ async function runTest() {
             type: "text"
           });
         }
-      } 
+      }
       // Handle static/doc check pauses
       else if (data.agent === "DocumentChecker") {
         if (data.expected_input === "has_registry" && !hasRegistryAnswered) {
@@ -173,7 +173,7 @@ async function runTest() {
         console.log("\n📄 [FINAL CARD] RECEIVED COMPILED PDF DOWNLOAD LINKS!");
         await logMongoWorkflowState("PIPELINE_COMPLETE");
         console.log("\n🎉 END-TO-END FLOW COMPLETED SUCCESSFULLY!");
-        
+
         socket.disconnect();
         await mongoose.disconnect();
         resolve("SUCCESS");

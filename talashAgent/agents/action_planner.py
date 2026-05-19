@@ -1,7 +1,7 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import get_vertex_client, DEEP_MODEL
+from gemini_client import get_vertex_client, DEEP_MODEL, make_config
 import os
 from tools.legal_tools import search_court_procedures, search_legal_aid
 
@@ -52,7 +52,7 @@ def _call_gemini(combined_context: dict, search_context: str):
     response = client.models.generate_content(
         model=DEEP_MODEL,
         contents=prompt,
-        config=genai.types.GenerateContentConfig(
+        config=make_config(
             system_instruction=system_prompt,
             response_mime_type="application/json",
             response_schema=ActionPlannerOutput,

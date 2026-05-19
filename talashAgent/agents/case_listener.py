@@ -1,8 +1,7 @@
 import json
 import logging
 from pydantic import BaseModel, Field
-from gemini_client import get_vertex_client, FAST_MODEL
-from google import genai
+from gemini_client import get_vertex_client, FAST_MODEL, make_config
 import os
 
 client = get_vertex_client()
@@ -48,7 +47,7 @@ def _call_gemini(text: str, input_type: str):
     response = client.models.generate_content(
         model=FAST_MODEL,
         contents=prompt,
-        config=genai.types.GenerateContentConfig(
+        config=make_config(
             system_instruction=system_prompt,
             response_mime_type="application/json",
             response_schema=CaseListenerOutput,

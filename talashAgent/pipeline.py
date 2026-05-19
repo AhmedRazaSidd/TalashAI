@@ -63,8 +63,7 @@ def normalize_lang(lang_str):
 
 def rephrase_question_gemini(question_text: str, user_confused_answer: str, lang: str) -> str:
     try:
-        from google import genai
-        from gemini_client import get_vertex_client, FAST_MODEL
+        from gemini_client import get_vertex_client, FAST_MODEL, make_config
         client = get_vertex_client()
         system_instruction = (
             "You are a helpful, extremely friendly legal assistant. "
@@ -78,9 +77,7 @@ def rephrase_question_gemini(question_text: str, user_confused_answer: str, lang
         response = client.models.generate_content(
             model=FAST_MODEL,
             contents=f"Rephrase: {question_text}",
-            config=genai.types.GenerateContentConfig(
-                system_instruction=system_instruction,
-            ),
+            config=make_config(system_instruction=system_instruction),
         )
         return response.text.strip()
     except Exception:

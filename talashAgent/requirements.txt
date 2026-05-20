@@ -7,3 +7,5 @@ uvicorn
 reportlab
 pypdf
 sse-starlette
+cloudinary
+speechrecognition

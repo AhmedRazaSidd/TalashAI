@@ -36,7 +36,10 @@ def get_vertex_client():
             possible_paths = [
                 "./service-account.json",
                 os.path.join(current_dir, "service-account.json"),
-                "service-account.json"
+                "service-account.json",
+                "./talash-496613-8a02ed4008c6.json",
+                os.path.join(current_dir, "talash-496613-8a02ed4008c6.json"),
+                "talash-496613-8a02ed4008c6.json"
             ]
             
             filepath = None

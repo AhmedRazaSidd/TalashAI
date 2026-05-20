@@ -1,4 +1,4 @@
-﻿# Python-generated files
+# Python-generated files
 __pycache__/
 *.py[oc]
 build/
@@ -11,3 +11,4 @@ wheels/
 
 # Credentials
 service-account.json
+talash-*.json

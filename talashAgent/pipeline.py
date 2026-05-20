@@ -6,7 +6,7 @@ import cloudinary.uploader
 from dotenv import load_dotenv
 
 # Load server/.env to get Cloudinary credentials
-load_dotenv(dotenv_path="../server/.env")
+load_dotenv()
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),

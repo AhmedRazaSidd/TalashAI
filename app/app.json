@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.ahmedrazasiddiqui.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,6 +29,11 @@
     "plugins": [
       "expo-localization",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "03303fcd-56ee-44c1-8576-d83d51af1b5f"
+      }
+    }
   }
 }

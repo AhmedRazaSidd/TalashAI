@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const SOCKET_URL = 'https://talash-ai.vercel.app';
+const SOCKET_URL = 'https://talashai-backend.onrender.com';
 
 class SocketClient {
   constructor() {

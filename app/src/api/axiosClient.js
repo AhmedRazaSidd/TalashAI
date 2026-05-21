@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const BASE_URL = 'https://talash-ai.vercel.app';
+const BASE_URL = 'https://talashai-backend.onrender.com';
 
 const axiosClient = axios.create({
   baseURL: BASE_URL,
